@@ -37,9 +37,21 @@ Route::middleware('auth')->group(function () {
         ->middleware('permission:view settings')
         ->name('settings.index');
 
+    Route::get('/settings/users', [SettingsController::class, 'users'])
+        ->middleware('permission:view users')
+        ->name('settings.users.index');
+
+    Route::get('/settings/rbac', [SettingsController::class, 'rbac'])
+        ->middleware('permission:manage settings')
+        ->name('settings.rbac');
+
     Route::post('/settings', [SettingsController::class, 'update'])
         ->middleware('permission:manage settings')
         ->name('settings.update');
+
+    Route::post('/settings/branding', [SettingsController::class, 'updateBranding'])
+        ->middleware('permission:manage settings')
+        ->name('settings.branding');
 
     Route::post('/settings/security', [SettingsController::class, 'updateMySecurity'])
         ->middleware('permission:view settings')
@@ -49,8 +61,22 @@ Route::middleware('auth')->group(function () {
         ->middleware('permission:manage users')
         ->name('settings.users.access');
 
-    Route::get('/settings/users/{user}/access', fn () => redirect()->route('settings.index'))
-        ->middleware('permission:view settings');
+    Route::get('/settings/users/{user}/access', function ($user) {
+        return redirect()->route('settings.users.index', ['user' => $user]);
+    })
+        ->middleware('permission:view users');
+
+    Route::get('/settings/users/export', [SettingsController::class, 'exportUsers'])
+        ->middleware('permission:manage users')
+        ->name('settings.users.export');
+
+    Route::post('/settings/users/import', [SettingsController::class, 'importUsers'])
+        ->middleware('permission:manage users')
+        ->name('settings.users.import');
+
+    Route::get('/settings/activity/export', [SettingsController::class, 'exportActivity'])
+        ->middleware('permission:view settings')
+        ->name('settings.activity.export');
 
     Route::post('/settings/users', [SettingsController::class, 'storeUser'])
         ->middleware('permission:manage users')
@@ -93,8 +119,12 @@ Route::middleware('auth')->group(function () {
         ->name('ui.options.leads');
 
     Route::get('/ui/datatables/users', [UiOptionsController::class, 'usersTable'])
-        ->middleware('permission:manage users')
+        ->middleware('permission:view users')
         ->name('ui.datatables.users');
+
+    Route::get('/ui/datatables/activities', [UiOptionsController::class, 'activityTable'])
+        ->middleware('permission:view settings')
+        ->name('ui.datatables.activities');
 
     Route::get('/notifications/feed', [NotificationController::class, 'feed'])
         ->middleware('permission:view notifications')

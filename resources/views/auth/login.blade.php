@@ -2,10 +2,23 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
+  @php
+    $uiBranding = \App\Support\AppSettings::uiBranding();
+    $brandDisplayName = trim((string) ($uiBranding['display_name'] ?? config('app.name', 'HariLog')));
+    $brandMark = trim((string) ($uiBranding['brand_mark'] ?? config('haarray.app_initial', 'H')));
+    $brandFavicon = trim((string) ($uiBranding['favicon_url'] ?? ''));
+    if ($brandDisplayName === '') {
+      $brandDisplayName = (string) config('app.name', 'HariLog');
+    }
+    if ($brandMark === '') {
+      $brandMark = (string) config('haarray.app_initial', 'H');
+    }
+  @endphp
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="csrf-token" content="{{ csrf_token() }}">
-  <title>Sign In — HariLog</title>
+  <title>Sign In — {{ $brandDisplayName }}</title>
+  <link rel="icon" type="image/x-icon" href="{{ $brandFavicon !== '' ? $brandFavicon : asset('favicon.ico') }}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=JetBrains+Mono:wght@400;500&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
@@ -21,7 +34,7 @@
   {{-- Left panel --}}
   <div class="h-auth-left">
     <div class="h-auth-art">
-      <div class="h-auth-logo">H</div>
+      <div class="h-auth-logo">{{ strtoupper(substr($brandMark, 0, 1)) }}</div>
       <div class="h-auth-headline">
         Track every<br><span>paisa.</span><br>Build wealth.
       </div>
@@ -50,7 +63,7 @@
       </div>
 
       <div class="h-auth-title">Welcome back</div>
-      <div class="h-auth-sub">Sign in to your HariLog account</div>
+      <div class="h-auth-sub">Sign in to your {{ $brandDisplayName }} account</div>
 
       {{-- Errors (server-side fallback) --}}
       @if($errors->any())

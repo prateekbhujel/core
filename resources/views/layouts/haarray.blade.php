@@ -2,10 +2,33 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
+  @php
+    $uiBranding = \App\Support\AppSettings::uiBranding();
+    $brandFavicon = trim((string) ($uiBranding['favicon_url'] ?? ''));
+    $brandLogo = trim((string) ($uiBranding['logo_url'] ?? ''));
+    $brandAppIcon = trim((string) ($uiBranding['app_icon_url'] ?? ''));
+    $themeColor = trim((string) ($uiBranding['theme_color'] ?? '#f5a623'));
+    if (!preg_match('/^#[0-9a-fA-F]{6}$/', $themeColor)) {
+      $themeColor = '#f5a623';
+    }
+    $brandMark = trim((string) ($uiBranding['brand_mark'] ?? config('haarray.app_initial', 'H')));
+    if ($brandMark === '') {
+      $brandMark = (string) config('haarray.app_initial', 'H');
+    }
+    $brandSubtitle = trim((string) ($uiBranding['brand_subtitle'] ?? ''));
+    if ($brandSubtitle === '') {
+      $brandSubtitle = 'by ' . ((string) config('haarray.brand_name', 'Haarray'));
+    }
+    $brandDisplayName = trim((string) ($uiBranding['display_name'] ?? config('app.name', 'HariLog')));
+    if ($brandDisplayName === '') {
+      $brandDisplayName = (string) config('app.name', 'HariLog');
+    }
+  @endphp
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="csrf-token" content="{{ csrf_token() }}">
-  <title>@yield('title', 'Dashboard') — HariLog</title>
+  <title>@yield('title', 'Dashboard') — {{ $brandDisplayName }}</title>
+  <link rel="icon" type="image/x-icon" href="{{ $brandFavicon !== '' ? $brandFavicon : asset('favicon.ico') }}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=JetBrains+Mono:wght@400;500&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
@@ -14,10 +37,19 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css">
   <link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/dataTables.bootstrap5.min.css">
   <link rel="stylesheet" href="{{ asset('css/haarray.app.css') }}">
+  <style>
+    :root {
+      --gold: {{ $themeColor }};
+      --gold-dk: {{ $themeColor }};
+    }
+  </style>
+  <meta name="theme-color" content="{{ $themeColor }}">
+  @if($brandAppIcon !== '')
+    <link rel="apple-touch-icon" href="{{ $brandAppIcon }}">
+  @endif
   @if(config('haarray.enable_pwa'))
     <link rel="manifest" href="{{ asset('manifest.json') }}">
-    <meta name="theme-color" content="#f5a623">
-    <link rel="apple-touch-icon" href="{{ asset('icons/pwa-192.png') }}">
+    <link rel="apple-touch-icon" href="{{ $brandAppIcon !== '' ? $brandAppIcon : asset('icons/pwa-192.png') }}">
   @endif
   @yield('styles')
 </head>
@@ -29,7 +61,8 @@
   data-pwa-enabled="{{ config('haarray.enable_pwa') ? '1' : '0' }}"
   data-sw-url="{{ asset('sw.js') }}"
   data-icon-sprite-url="{{ asset('icons/icons.svg') }}"
-  data-favicon-url="{{ asset('favicon.ico') }}"
+  data-favicon-url="{{ $brandFavicon !== '' ? $brandFavicon : asset('favicon.ico') }}"
+  data-theme-color="{{ $themeColor }}"
 >
 
 {{-- Sidebar overlay (mobile) --}}
@@ -44,106 +77,168 @@
 <aside class="h-sidebar" id="h-sidebar">
 
   {{-- Brand --}}
-  <div class="h-brand">
-    <div class="h-brand-mark">H</div>
+  <div class="h-brand" id="h-sidebar-brand">
+    @if($brandLogo !== '')
+      <img src="{{ $brandLogo }}" alt="{{ $brandDisplayName }} logo" class="h-brand-logo">
+    @else
+      <div class="h-brand-mark">{{ strtoupper(substr($brandMark, 0, 1)) }}</div>
+    @endif
     <div>
-      <div class="h-brand-name">HariLog</div>
-      <div class="h-brand-sub">by Haarray</div>
+      <div class="h-brand-name">{{ $brandDisplayName }}</div>
+      <div class="h-brand-sub">{{ $brandSubtitle }}</div>
     </div>
   </div>
 
-  {{-- Nav --}}
-  <div class="h-nav-sec">Finance</div>
-  @can('view dashboard')
-    <a data-spa href="{{ route('dashboard') }}" class="h-nav-item {{ request()->routeIs('dashboard') ? 'active' : '' }}">
-      <i class="h-nav-icon fa-solid fa-gauge-high fa-fw"></i>
-      Dashboard
-    </a>
-  @endcan
-  <a href="#" class="h-nav-item" onclick="HToast.info('Coming soon!');return false;">
-    <i class="h-nav-icon fa-solid fa-money-bill-transfer fa-fw"></i>
-    Transactions
-    <span class="h-nav-badge">Soon</span>
-  </a>
-  <a href="#" class="h-nav-item" onclick="HToast.info('Coming soon!');return false;">
-    <i class="h-nav-icon fa-solid fa-building-columns fa-fw"></i>
-    Accounts
-  </a>
-  <a href="#" class="h-nav-item" onclick="HToast.info('Coming soon!');return false;">
-    <i class="h-nav-icon fa-solid fa-chart-line fa-fw"></i>
-    Portfolio
-  </a>
-
-  <div class="h-nav-sec">Market</div>
-  <a href="#" class="h-nav-item" onclick="HToast.info('Coming soon!');return false;">
-    <i class="h-nav-icon fa-solid fa-clock fa-fw"></i>
-    IPO Tracker
-    <span class="h-nav-badge teal">3</span>
-  </a>
-  <a href="#" class="h-nav-item" onclick="HToast.info('Coming soon!');return false;">
-    <i class="h-nav-icon fa-solid fa-coins fa-fw"></i>
-    Gold & Forex
-  </a>
-
-  <div class="h-nav-sec">Intelligence</div>
-  <a href="#" class="h-nav-item" onclick="HToast.info('Coming soon!');return false;">
-    <i class="h-nav-icon fa-solid fa-lightbulb fa-fw"></i>
-    Suggestions
-    <span class="h-nav-badge">2</span>
-  </a>
-  <a href="#" class="h-nav-item" onclick="HToast.info('Coming soon!');return false;">
-    <i class="h-nav-icon fa-brands fa-telegram fa-fw"></i>
-    Telegram Bot
-  </a>
-
-  <div class="h-nav-sec">System</div>
-  @can('view docs')
-    <a data-spa href="{{ route('docs.index') }}" class="h-nav-item {{ request()->routeIs('docs.*') ? 'active' : '' }}">
-      <i class="h-nav-icon fa-solid fa-book-open fa-fw"></i>
-      Docs
-    </a>
-  @endcan
-  @can('view settings')
-    <a data-spa href="{{ route('settings.index') }}" class="h-nav-item {{ request()->routeIs('settings.*') ? 'active' : '' }}">
-      <i class="h-nav-icon fa-solid fa-sliders fa-fw"></i>
-      Settings
-    </a>
-  @endcan
-  @if(auth()->user()->can('view settings'))
-    <div class="h-nav-sub">
-      <a
-        data-spa
-        href="{{ route('settings.index', ['tab' => 'settings-access']) }}"
-        data-match-query="tab=settings-access"
-        class="h-nav-sub-item {{ request()->routeIs('settings.*') && request()->query('tab') === 'settings-access' ? 'active' : '' }}"
-      >
-        <i class="fa-solid fa-shield-halved fa-fw"></i>
-        Access
+  <div class="h-sidebar-nav" id="h-sidebar-nav">
+    {{-- Nav --}}
+    <div class="h-nav-sec">Finance</div>
+    @can('view dashboard')
+      <a data-spa href="{{ route('dashboard') }}" class="h-nav-item {{ request()->routeIs('dashboard') ? 'active' : '' }}">
+        <i class="h-nav-icon fa-solid fa-gauge-high fa-fw"></i>
+        Dashboard
       </a>
-      @if(auth()->user()->can('manage settings'))
-        <a
-          data-spa
-          href="{{ route('settings.index', ['tab' => 'settings-ops', 'ops_tab' => 'ops-overview']) }}"
-          data-match-query="tab=settings-ops&ops_tab=ops-overview"
-          class="h-nav-sub-item {{ request()->routeIs('settings.*') && request()->query('tab') === 'settings-ops' && request()->query('ops_tab') === 'ops-overview' ? 'active' : '' }}"
-        >
-          <i class="fa-solid fa-gauge-high fa-fw"></i>
-          Diagnostics
-        </a>
-        <a
-          data-spa
-          href="{{ route('settings.index', ['tab' => 'settings-ops', 'ops_tab' => 'ops-ml']) }}"
-          data-match-query="tab=settings-ops&ops_tab=ops-ml"
-          class="h-nav-sub-item {{ request()->routeIs('settings.*') && request()->query('tab') === 'settings-ops' && request()->query('ops_tab') === 'ops-ml' ? 'active' : '' }}"
-        >
-          <i class="fa-solid fa-flask-vial fa-fw"></i>
-          ML Lab
-        </a>
-      @endif
-    </div>
-  @endif
+    @endcan
+    <a href="#" class="h-nav-item" onclick="HToast.info('Coming soon!');return false;">
+      <i class="h-nav-icon fa-solid fa-money-bill-transfer fa-fw"></i>
+      Transactions
+      <span class="h-nav-badge">Soon</span>
+    </a>
+    <a href="#" class="h-nav-item" onclick="HToast.info('Coming soon!');return false;">
+      <i class="h-nav-icon fa-solid fa-building-columns fa-fw"></i>
+      Accounts
+    </a>
+    <a href="#" class="h-nav-item" onclick="HToast.info('Coming soon!');return false;">
+      <i class="h-nav-icon fa-solid fa-chart-line fa-fw"></i>
+      Portfolio
+    </a>
 
-  <div class="h-sidebar-spacer"></div>
+    <div class="h-nav-sec">Market</div>
+    <a href="#" class="h-nav-item" onclick="HToast.info('Coming soon!');return false;">
+      <i class="h-nav-icon fa-solid fa-clock fa-fw"></i>
+      IPO Tracker
+      <span class="h-nav-badge teal">3</span>
+    </a>
+    <a href="#" class="h-nav-item" onclick="HToast.info('Coming soon!');return false;">
+      <i class="h-nav-icon fa-solid fa-coins fa-fw"></i>
+      Gold & Forex
+    </a>
+
+    <div class="h-nav-sec">Intelligence</div>
+    <a href="#" class="h-nav-item" onclick="HToast.info('Coming soon!');return false;">
+      <i class="h-nav-icon fa-solid fa-lightbulb fa-fw"></i>
+      Suggestions
+      <span class="h-nav-badge">2</span>
+    </a>
+    <a href="#" class="h-nav-item" onclick="HToast.info('Coming soon!');return false;">
+      <i class="h-nav-icon fa-brands fa-telegram fa-fw"></i>
+      Telegram Bot
+    </a>
+
+    <div class="h-nav-sec">System</div>
+    @can('view docs')
+      <a data-spa href="{{ route('docs.index') }}" class="h-nav-item {{ request()->routeIs('docs.*') ? 'active' : '' }}">
+        <i class="h-nav-icon fa-solid fa-book-open fa-fw"></i>
+        Docs
+      </a>
+    @endcan
+    @if(auth()->user()->can('view settings'))
+      @php
+        $isSettingsRoute = request()->routeIs('settings.*');
+        $isUsersRoute = request()->routeIs('settings.users.*');
+        $isRbacRoute = request()->routeIs('settings.rbac');
+        $activeSettingsTab = (string) request()->query('tab', 'settings-app');
+      @endphp
+      <div
+        class="h-nav-group {{ $isSettingsRoute ? 'open' : '' }}"
+        data-nav-group="settings"
+        data-expanded="{{ $isSettingsRoute ? '1' : '0' }}"
+        data-manual="0"
+      >
+        <button
+          type="button"
+          class="h-nav-item h-nav-parent {{ $isSettingsRoute ? 'active' : '' }}"
+          data-nav-toggle="settings"
+          aria-expanded="{{ $isSettingsRoute ? 'true' : 'false' }}"
+        >
+          <span class="h-row" style="gap:9px;">
+            <i class="h-nav-icon fa-solid fa-sliders fa-fw"></i>
+            Settings
+          </span>
+          <i class="fa-solid fa-chevron-right h-nav-caret"></i>
+        </button>
+
+        <div class="h-nav-sub">
+          <a
+            data-spa
+            href="{{ route('settings.index', ['tab' => 'settings-app']) }}"
+            data-match-query="tab=settings-app"
+            class="h-nav-sub-item {{ request()->routeIs('settings.index') && $activeSettingsTab === 'settings-app' ? 'active' : '' }}"
+          >
+            <i class="fa-solid fa-palette fa-fw"></i>
+            App Settings
+          </a>
+          <a
+            data-spa
+            href="{{ route('settings.index', ['tab' => 'settings-activity']) }}"
+            data-match-query="tab=settings-activity"
+            class="h-nav-sub-item {{ request()->routeIs('settings.index') && $activeSettingsTab === 'settings-activity' ? 'active' : '' }}"
+          >
+            <i class="fa-solid fa-chart-line fa-fw"></i>
+            Activity
+          </a>
+          <a
+            data-spa
+            href="{{ route('settings.index', ['tab' => 'settings-notifications']) }}"
+            data-match-query="tab=settings-notifications"
+            class="h-nav-sub-item {{ request()->routeIs('settings.index') && $activeSettingsTab === 'settings-notifications' ? 'active' : '' }}"
+          >
+            <i class="fa-solid fa-bell fa-fw"></i>
+            Notifications
+          </a>
+          @if(auth()->user()->can('manage settings'))
+            <a
+              data-spa
+              href="{{ route('settings.index', ['tab' => 'settings-system']) }}"
+              data-match-query="tab=settings-system"
+              class="h-nav-sub-item {{ request()->routeIs('settings.index') && $activeSettingsTab === 'settings-system' ? 'active' : '' }}"
+            >
+              <i class="fa-solid fa-gear fa-fw"></i>
+              System
+            </a>
+            <a
+              data-spa
+              href="{{ route('settings.index', ['tab' => 'settings-diagnostics']) }}"
+              data-match-query="tab=settings-diagnostics"
+              class="h-nav-sub-item {{ request()->routeIs('settings.index') && $activeSettingsTab === 'settings-diagnostics' ? 'active' : '' }}"
+            >
+              <i class="fa-solid fa-stethoscope fa-fw"></i>
+              Diagnostics
+            </a>
+          @endif
+          @if(auth()->user()->can('view users'))
+            <a
+              data-spa
+              href="{{ route('settings.users.index') }}"
+              class="h-nav-sub-item {{ $isUsersRoute ? 'active' : '' }}"
+            >
+              <i class="fa-solid fa-users fa-fw"></i>
+              Users
+            </a>
+          @endif
+          @if(auth()->user()->can('manage settings'))
+            <a
+              data-spa
+              href="{{ route('settings.rbac') }}"
+              class="h-nav-sub-item {{ $isRbacRoute ? 'active' : '' }}"
+            >
+              <i class="fa-solid fa-user-lock fa-fw"></i>
+              Access & RBAC
+            </a>
+          @endif
+        </div>
+      </div>
+    @endif
+  </div>
 
   {{-- User + logout --}}
   <div class="h-sidebar-bottom">

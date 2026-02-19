@@ -14,10 +14,13 @@ Laravel starter kit for Haarray products with progressive SPA behavior, reusable
 - Yajra DataTables + server-side table endpoints
 - Bootstrap + Font Awesome integration (open source)
 - Dedicated sidebar docs + settings pages
+- Dedicated `Users` and `Access & RBAC` pages (no modal-only CRUD)
 - UI-based `.env` settings editor for whitelisted keys
 - Optional PWA install flow (manifest + service worker + install prompt)
-- Modal-based RBAC management (create/edit/delete roles + users)
-- Diagnostics tabs with Git/DB browser/log/browser errors/user activity visibility
+- Settings app-branding panel with DB-backed app name/logo/favicon/app icon/theme color
+- Activity tab with Yajra DataTable + export
+- Diagnostics tabs with DB browser/log/ML checks/user activity visibility
+- Multi-level Settings sidebar navigation with dedicated links for app/activity/users/RBAC
 
 ## Tech profile
 
@@ -61,7 +64,10 @@ haarray-core/
 │   │   ├── select.blade.php
 │   │   └── confirm-modal.blade.php
 │   ├── docs/starter-kit.blade.php
-│   └── settings/index.blade.php
+│   └── settings/
+│       ├── index.blade.php
+│       ├── users.blade.php
+│       └── rbac.blade.php
 ├── docs/
 │   ├── SPA.md
 │   └── STARTER_KIT.md

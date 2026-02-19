@@ -3,8 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Http\Services\AdvancedMLService;
+use App\Support\AppSettings;
 use App\Models\User;
 use App\Models\UserActivity;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
@@ -14,6 +16,10 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
+use Maatwebsite\Excel\Concerns\FromArray;
+use Maatwebsite\Excel\Concerns\ToArray;
+use Maatwebsite\Excel\Concerns\WithHeadings;
+use Maatwebsite\Excel\Facades\Excel;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
@@ -25,10 +31,12 @@ class SettingsController extends Controller
     public function index(): View
     {
         $viewer = request()->user();
+        $dbConnectionInfo = $this->databaseConnectionInfo();
+        $uiBranding = AppSettings::uiBranding();
+        $mediaLibrary = $this->brandingMediaLibrary();
 
         $fields = $this->fields();
         $values = $this->readEnvValues(array_keys($fields));
-        $permissionTablesReady = $this->permissionTablesReady();
         $opsUiEnabled = $this->opsUiEnabled($values);
 
         foreach ($fields as $key => $meta) {
@@ -40,6 +48,73 @@ class SettingsController extends Controller
         $canManageSettings = (bool) ($viewer && $viewer->can('manage settings'));
         $canManageUsers = (bool) ($viewer && $viewer->can('manage users'));
 
+        $opsSnapshot = [];
+        $dbBrowser = [];
+        $recentActivities = $canManageSettings ? $this->recentActivities(120) : collect();
+        if ($canManageSettings && $opsUiEnabled) {
+            $opsSnapshot = $this->buildOpsSnapshot($dbConnectionInfo['connection']);
+            $dbBrowser = $this->buildDbBrowser((string) request()->query('db_table', ''), $dbConnectionInfo['connection']);
+        }
+
+        return view('settings.index', [
+            'fields'      => $fields,
+            'values'      => $values,
+            'sections'    => $this->sections(),
+            'envWritable' => $this->envWritable(),
+            'isAdmin'     => $canManageSettings || $canManageUsers || (bool) ($viewer && $viewer->isAdmin()),
+            'canManageSettings' => $canManageSettings,
+            'canManageUsers' => $canManageUsers,
+            'hasSpatiePermissions' => $this->permissionTablesReady(),
+            'opsUiEnabled' => $opsUiEnabled,
+            'opsSnapshot' => $opsSnapshot,
+            'dbBrowser' => $dbBrowser,
+            'recentActivities' => $recentActivities,
+            'opsOutput' => (string) session('ops_output', ''),
+            'mlDiagnostics' => $this->buildMlDiagnostics(),
+            'mlProbeResult' => session('ml_probe_result', []),
+            'dbConnectionInfo' => $dbConnectionInfo,
+            'uiBranding' => $uiBranding,
+            'mediaLibrary' => $mediaLibrary,
+        ]);
+    }
+
+    public function users(Request $request): View
+    {
+        $viewer = $request->user();
+        $this->assertCan($request, 'view users', 'You do not have permission to view users.');
+
+        $permissionTablesReady = $this->permissionTablesReady();
+        $roles = $this->availableRoleNames();
+        $permissions = $this->availablePermissionNames();
+        $canManageUsers = (bool) ($viewer && $viewer->can('manage users'));
+
+        $query = User::query()->orderBy('name');
+        if ($permissionTablesReady) {
+            $query->with(['roles:id,name', 'permissions:id,name']);
+        }
+        $users = $query->get();
+
+        $selectedUserId = (int) $request->query('user', 0);
+        $selectedUser = $users->firstWhere('id', $selectedUserId);
+        if (!$selectedUser instanceof User) {
+            $selectedUser = $users->first();
+        }
+
+        return view('settings.users', [
+            'users' => $users,
+            'selectedUser' => $selectedUser,
+            'roles' => $roles,
+            'permissionOptions' => $permissions,
+            'hasSpatiePermissions' => $permissionTablesReady,
+            'canManageUsers' => $canManageUsers,
+        ]);
+    }
+
+    public function rbac(Request $request): View
+    {
+        $this->assertCan($request, 'manage settings', 'Only authorized admins can manage RBAC.');
+
+        $permissionTablesReady = $this->permissionTablesReady();
         $roles = collect();
         $roleNames = $this->availableRoleNames();
         $permissionOptions = collect($this->availablePermissionNames());
@@ -66,31 +141,14 @@ class SettingsController extends Controller
             })->values();
         }
 
-        $users = collect();
-        if ($canManageUsers) {
-            $userQuery = User::query()->orderBy('name');
-            if ($permissionTablesReady) {
-                $userQuery->with(['roles:id,name', 'permissions:id,name']);
-            }
-            $users = $userQuery->get();
+        $editRoleId = (int) $request->query('role', 0);
+        $editRole = null;
+        if ($permissionTablesReady && $editRoleId > 0) {
+            $editRole = Role::query()->with('permissions')->find($editRoleId);
         }
 
-        $opsSnapshot = [];
-        $dbBrowser = [];
-        $recentActivities = collect();
-        if ($canManageSettings && $opsUiEnabled) {
-            $opsSnapshot = $this->buildOpsSnapshot();
-            $dbBrowser = $this->buildDbBrowser((string) request()->query('db_table', ''));
-            $recentActivities = $this->recentActivities(120);
-        }
-
-        return view('settings.index', [
-            'fields'      => $fields,
-            'values'      => $values,
-            'sections'    => $this->sections(),
-            'envWritable' => $this->envWritable(),
-            'users'       => $users,
-            'isAdmin'     => $canManageSettings || $canManageUsers || (bool) ($viewer && $viewer->isAdmin()),
+        return view('settings.rbac', [
+            'hasSpatiePermissions' => $permissionTablesReady,
             'roles' => $roles,
             'roleNames' => $roleNames,
             'permissionOptions' => $permissionOptions,
@@ -100,17 +158,256 @@ class SettingsController extends Controller
             'roleExtraPermissionMap' => $roleExtraPermissionMap,
             'roleCatalog' => $roleCatalog,
             'protectedRoleNames' => $this->protectedRoleNames(),
-            'canManageSettings' => $canManageSettings,
-            'canManageUsers' => $canManageUsers,
-            'hasSpatiePermissions' => $permissionTablesReady,
-            'opsUiEnabled' => $opsUiEnabled,
-            'opsSnapshot' => $opsSnapshot,
-            'dbBrowser' => $dbBrowser,
-            'recentActivities' => $recentActivities,
-            'opsOutput' => (string) session('ops_output', ''),
-            'mlDiagnostics' => $this->buildMlDiagnostics(),
-            'mlProbeResult' => session('ml_probe_result', []),
+            'editRole' => $editRole,
         ]);
+    }
+
+    public function exportUsers(Request $request)
+    {
+        $this->assertCan($request, 'manage users', 'Only authorized users can export accounts.');
+
+        $permissionTablesReady = $this->permissionTablesReady();
+        $query = User::query()->orderBy('id');
+        if ($permissionTablesReady) {
+            $query->with(['roles:id,name', 'permissions:id,name']);
+        }
+
+        $rows = $query->get()->map(function (User $user) use ($permissionTablesReady) {
+            $roleName = $permissionTablesReady
+                ? (optional($user->roles->first())->name ?: ($user->role ?: 'user'))
+                : ($user->role ?: 'user');
+            $permissions = $permissionTablesReady
+                ? $user->permissions->pluck('name')->implode(', ')
+                : '';
+
+            return [
+                'name' => (string) $user->name,
+                'email' => (string) $user->email,
+                'password' => '',
+                'role' => (string) $roleName,
+                'telegram_chat_id' => (string) ($user->telegram_chat_id ?? ''),
+                'receive_in_app_notifications' => $user->receive_in_app_notifications ? '1' : '0',
+                'receive_telegram_notifications' => $user->receive_telegram_notifications ? '1' : '0',
+                'browser_notifications_enabled' => $user->browser_notifications_enabled ? '1' : '0',
+                'permissions' => $permissions,
+            ];
+        })->values()->all();
+
+        $headings = [
+            'name',
+            'email',
+            'password',
+            'role',
+            'telegram_chat_id',
+            'receive_in_app_notifications',
+            'receive_telegram_notifications',
+            'browser_notifications_enabled',
+            'permissions',
+        ];
+
+        $export = new class($rows, $headings) implements FromArray, WithHeadings
+        {
+            /**
+             * @param array<int, array<string, string>> $rows
+             * @param array<int, string> $headings
+             */
+            public function __construct(private array $rows, private array $headings) {}
+
+            public function array(): array
+            {
+                return $this->rows;
+            }
+
+            public function headings(): array
+            {
+                return $this->headings;
+            }
+        };
+
+        $filename = 'haarray-users-' . now()->format('Ymd_His') . '.xlsx';
+
+        return Excel::download($export, $filename);
+    }
+
+    public function importUsers(Request $request): RedirectResponse
+    {
+        $this->assertCan($request, 'manage users', 'Only authorized users can import accounts.');
+
+        $validated = $request->validate([
+            'import_file' => ['required', 'file', 'mimes:xlsx,xls,csv,txt', 'max:5120'],
+        ]);
+
+        $file = $validated['import_file'];
+
+        try {
+            $import = new class implements ToArray
+            {
+                /**
+                 * @param mixed $sheet
+                 * @return array<int, array<int, mixed>>
+                 */
+                public function array($sheet): array
+                {
+                    return $sheet->toArray();
+                }
+            };
+
+            $sheets = Excel::toArray($import, $file);
+            $rows = $sheets[0] ?? [];
+        } catch (Throwable $exception) {
+            return back()->with('error', 'Import failed: ' . $exception->getMessage());
+        }
+
+        if (count($rows) < 2) {
+            return back()->with('error', 'Import file must include a header row and at least one data row.');
+        }
+
+        $headerRow = array_shift($rows);
+        if (!is_array($headerRow) || empty($headerRow)) {
+            return back()->with('error', 'Invalid import header row.');
+        }
+
+        $headers = [];
+        foreach ($headerRow as $index => $label) {
+            $headers[(int) $index] = $this->normalizeImportHeading((string) $label, (int) $index);
+        }
+
+        $availableRoles = $this->availableRoleNames();
+        $availableRoleSet = array_fill_keys($availableRoles, true);
+        $permissionTablesReady = $this->permissionTablesReady();
+        $availablePermissions = $this->availablePermissionNames();
+        $availablePermissionSet = array_fill_keys($availablePermissions, true);
+
+        $created = 0;
+        $updated = 0;
+        $skipped = 0;
+
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                $skipped++;
+                continue;
+            }
+
+            $item = [];
+            foreach ($headers as $index => $key) {
+                $item[$key] = trim((string) ($row[$index] ?? ''));
+            }
+
+            $email = strtolower(trim((string) ($item['email'] ?? '')));
+            if ($email === '' || filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
+                $skipped++;
+                continue;
+            }
+
+            $name = trim((string) ($item['name'] ?? ''));
+            if ($name === '') {
+                $name = Str::headline(Str::before($email, '@'));
+            }
+
+            $roleName = strtolower(trim((string) ($item['role'] ?? 'user')));
+            if ($roleName === '' || !isset($availableRoleSet[$roleName])) {
+                $roleName = 'user';
+            }
+
+            $existing = User::query()->where('email', $email)->first();
+            $isNew = !$existing;
+            $user = $existing ?: new User();
+
+            $user->email = $email;
+            $user->name = $name;
+            $user->role = $roleName;
+            $user->telegram_chat_id = trim((string) ($item['telegram_chat_id'] ?? '')) ?: null;
+
+            $user->receive_in_app_notifications = array_key_exists('receive_in_app_notifications', $item)
+                ? $this->parseImportBoolean((string) $item['receive_in_app_notifications'])
+                : ($isNew ? true : (bool) $user->receive_in_app_notifications);
+            $user->receive_telegram_notifications = array_key_exists('receive_telegram_notifications', $item)
+                ? $this->parseImportBoolean((string) $item['receive_telegram_notifications'])
+                : (bool) $user->receive_telegram_notifications;
+            $user->browser_notifications_enabled = array_key_exists('browser_notifications_enabled', $item)
+                ? $this->parseImportBoolean((string) $item['browser_notifications_enabled'])
+                : (bool) $user->browser_notifications_enabled;
+
+            $password = trim((string) ($item['password'] ?? ''));
+            if ($password !== '') {
+                $user->password = $password;
+            } elseif ($isNew) {
+                $user->password = Str::random(16);
+            }
+
+            $user->save();
+
+            if ($permissionTablesReady) {
+                $user->syncRoles([$roleName]);
+
+                if (array_key_exists('permissions', $item)) {
+                    $rawPermissions = preg_split('/[,\|]/', (string) ($item['permissions'] ?? '')) ?: [];
+                    $normalized = array_values(array_filter(array_map(
+                        fn ($permission) => trim((string) $permission),
+                        $rawPermissions
+                    ), fn (string $permission) => $permission !== '' && isset($availablePermissionSet[$permission])));
+                    $user->syncPermissions($normalized);
+                }
+            }
+
+            if ($isNew) {
+                $created++;
+            } else {
+                $updated++;
+            }
+        }
+
+        if ($permissionTablesReady) {
+            app(PermissionRegistrar::class)->forgetCachedPermissions();
+        }
+
+        return back()->with(
+            'success',
+            "User import complete. Created {$created}, updated {$updated}, skipped {$skipped}."
+        );
+    }
+
+    public function exportActivity(Request $request)
+    {
+        $this->assertCan($request, 'view settings', 'You do not have permission to export activity logs.');
+
+        $rows = $this->recentActivities(2000)->map(function (UserActivity $activity) {
+            return [
+                'datetime' => optional($activity->created_at)->format('Y-m-d H:i:s'),
+                'user' => (string) ($activity->user->name ?? 'Unknown'),
+                'email' => (string) ($activity->user->email ?? ''),
+                'method' => strtoupper((string) $activity->method),
+                'path' => (string) $activity->path,
+                'route_name' => (string) ($activity->route_name ?: ''),
+                'status' => (string) (data_get($activity->meta, 'status', '')),
+                'ip_address' => (string) ($activity->ip_address ?? ''),
+            ];
+        })->values()->all();
+
+        $headings = ['datetime', 'user', 'email', 'method', 'path', 'route_name', 'status', 'ip_address'];
+
+        $export = new class($rows, $headings) implements FromArray, WithHeadings
+        {
+            /**
+             * @param array<int, array<string, string|null>> $rows
+             * @param array<int, string> $headings
+             */
+            public function __construct(private array $rows, private array $headings) {}
+
+            public function array(): array
+            {
+                return $this->rows;
+            }
+
+            public function headings(): array
+            {
+                return $this->headings;
+            }
+        };
+
+        $filename = 'haarray-activity-' . now()->format('Ymd_His') . '.xlsx';
+
+        return Excel::download($export, $filename);
     }
 
     public function update(Request $request): RedirectResponse
@@ -138,6 +435,52 @@ class SettingsController extends Controller
         }
 
         return back()->with('success', 'Environment settings were updated successfully.');
+    }
+
+    public function updateBranding(Request $request): RedirectResponse
+    {
+        $this->assertCan($request, 'manage settings', 'Only authorized admins can change branding settings.');
+
+        $validated = $request->validate([
+            'ui_display_name' => ['required', 'string', 'max:120'],
+            'ui_brand_subtitle' => ['nullable', 'string', 'max:120'],
+            'ui_brand_mark' => ['required', 'string', 'max:8'],
+            'ui_theme_color' => ['required', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
+            'ui_logo_url' => ['nullable', 'string', 'max:2048'],
+            'ui_favicon_url' => ['nullable', 'string', 'max:2048'],
+            'ui_app_icon_url' => ['nullable', 'string', 'max:2048'],
+            'ui_logo_file' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,svg', 'max:4096'],
+            'ui_favicon_file' => ['nullable', 'file', 'mimes:ico,png,webp,svg', 'max:2048'],
+            'ui_app_icon_file' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,svg,ico', 'max:4096'],
+        ]);
+
+        $logoUrl = trim((string) ($validated['ui_logo_url'] ?? ''));
+        $faviconUrl = trim((string) ($validated['ui_favicon_url'] ?? ''));
+        $appIconUrl = trim((string) ($validated['ui_app_icon_url'] ?? ''));
+
+        if ($request->hasFile('ui_logo_file')) {
+            $logoUrl = $this->storeBrandAsset($request->file('ui_logo_file'), 'logo');
+        }
+
+        if ($request->hasFile('ui_favicon_file')) {
+            $faviconUrl = $this->storeBrandAsset($request->file('ui_favicon_file'), 'favicon');
+        }
+
+        if ($request->hasFile('ui_app_icon_file')) {
+            $appIconUrl = $this->storeBrandAsset($request->file('ui_app_icon_file'), 'app-icon');
+        }
+
+        AppSettings::putMany([
+            'ui.display_name' => trim((string) $validated['ui_display_name']),
+            'ui.brand_subtitle' => trim((string) ($validated['ui_brand_subtitle'] ?? '')),
+            'ui.brand_mark' => trim((string) $validated['ui_brand_mark']),
+            'ui.theme_color' => strtolower((string) $validated['ui_theme_color']),
+            'ui.logo_url' => $logoUrl,
+            'ui.favicon_url' => $faviconUrl,
+            'ui.app_icon_url' => $appIconUrl,
+        ]);
+
+        return back()->with('success', 'Branding and asset settings updated successfully.');
     }
 
     public function updateUserAccess(Request $request, User $user): RedirectResponse
@@ -238,9 +581,16 @@ class SettingsController extends Controller
             $granted = [];
 
             foreach ($modules as $moduleKey => $meta) {
-                $level = strtolower((string) ($moduleLevels[$moduleKey] ?? 'none'));
-                if (!in_array($level, ['none', 'view', 'manage'], true)) {
-                    $level = 'none';
+                $rawLevel = $moduleLevels[$moduleKey] ?? 'none';
+                if (is_array($rawLevel)) {
+                    $manageEnabled = filter_var($rawLevel['manage'] ?? false, FILTER_VALIDATE_BOOL);
+                    $viewEnabled = filter_var($rawLevel['view'] ?? false, FILTER_VALIDATE_BOOL) || $manageEnabled;
+                    $level = $manageEnabled ? 'manage' : ($viewEnabled ? 'view' : 'none');
+                } else {
+                    $level = strtolower((string) $rawLevel);
+                    if (!in_array($level, ['none', 'view', 'manage'], true)) {
+                        $level = 'none';
+                    }
                 }
 
                 if ($level === 'view' || $level === 'manage') {
@@ -499,10 +849,6 @@ class SettingsController extends Controller
 
         $validated = $request->validate([
             'action' => ['required', Rule::in([
-                'git_status',
-                'git_pull',
-                'git_push',
-                'composer_dump_autoload',
                 'optimize_clear',
                 'migrate_status',
                 'fix_permissions',
@@ -512,10 +858,6 @@ class SettingsController extends Controller
         $action = (string) $validated['action'];
 
         $result = match ($action) {
-            'git_status' => $this->runShell('git status --short --branch'),
-            'git_pull' => $this->runShell('git pull --ff-only'),
-            'git_push' => $this->runShell('git push'),
-            'composer_dump_autoload' => $this->runShell('composer dump-autoload -o', 90),
             'optimize_clear' => $this->runShell('php artisan optimize:clear', 90),
             'migrate_status' => $this->runShell('php artisan migrate:status --no-ansi', 90),
             'fix_permissions' => $this->runShell('chmod -R 0777 storage bootstrap/cache', 30),
@@ -1267,17 +1609,43 @@ class SettingsController extends Controller
     }
 
     /**
-     * @return array<string, mixed>
+     * @return array{connection:string,driver:string,host:string,port:string,database:string,username:string}
      */
-    private function buildOpsSnapshot(): array
+    private function databaseConnectionInfo(): array
     {
-        $branch = $this->runShell('git rev-parse --abbrev-ref HEAD');
-        $status = $this->runShell('git status --short --branch');
+        $connection = (string) config('database.default', 'mysql');
+        $config = (array) config('database.connections.' . $connection, []);
+
+        $database = (string) ($config['database'] ?? '');
+        try {
+            $runtimeName = (string) DB::connection($connection)->getDatabaseName();
+            if ($runtimeName !== '') {
+                $database = $runtimeName;
+            }
+        } catch (Throwable $exception) {
+            // Keep config-level fallback when runtime lookup fails.
+        }
 
         return [
-            'git_branch' => $branch['output'],
-            'git_status' => $status['output'],
-            'db_tables' => $this->databaseTableSnapshot(),
+            'connection' => $connection,
+            'driver' => (string) ($config['driver'] ?? ''),
+            'host' => (string) ($config['host'] ?? ''),
+            'port' => (string) ($config['port'] ?? ''),
+            'database' => $database,
+            'username' => (string) ($config['username'] ?? ''),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function buildOpsSnapshot(string $connection): array
+    {
+        return [
+            'php_version' => PHP_VERSION,
+            'app_env' => app()->environment(),
+            'app_debug' => config('app.debug') ? 'true' : 'false',
+            'db_tables' => $this->databaseTableSnapshot($connection),
             'log_tail' => $this->tailFile(storage_path('logs/laravel.log'), 140),
         ];
     }
@@ -1285,11 +1653,11 @@ class SettingsController extends Controller
     /**
      * @return array<int, array{name:string,row_count:int|null,columns:string}>
      */
-    private function databaseTableSnapshot(): array
+    private function databaseTableSnapshot(string $connection): array
     {
         $tables = [];
         try {
-            $listing = Schema::getTableListing();
+            $listing = Schema::connection($connection)->getTableListing();
         } catch (Throwable $exception) {
             return [];
         }
@@ -1300,13 +1668,13 @@ class SettingsController extends Controller
             $columns = [];
 
             try {
-                $rowCount = (int) DB::table($tableName)->count();
+                $rowCount = (int) DB::connection($connection)->table($tableName)->count();
             } catch (Throwable $exception) {
                 $rowCount = null;
             }
 
             try {
-                $columns = Schema::getColumnListing($tableName);
+                $columns = Schema::connection($connection)->getColumnListing($tableName);
             } catch (Throwable $exception) {
                 $columns = [];
             }
@@ -1328,12 +1696,14 @@ class SettingsController extends Controller
     }
 
     /**
-     * @return array{tables:array<int, string>,selected:string,columns:array<int,string>,rows:array<int,array<string,mixed>>,row_count:int|null,error:string}
+     * @return array{tables:array<int, string>,selected:string,columns:array<int,string>,rows:array<int,array<string,mixed>>,row_count:int|null,connection:string,error:string}
      */
-    private function buildDbBrowser(string $selectedTable = ''): array
+    private function buildDbBrowser(string $selectedTable = '', string $connection = ''): array
     {
+        $targetConnection = trim($connection) !== '' ? $connection : (string) config('database.default', 'mysql');
+
         try {
-            $tables = Schema::getTableListing();
+            $tables = Schema::connection($targetConnection)->getTableListing();
         } catch (Throwable $exception) {
             return [
                 'tables' => [],
@@ -1341,6 +1711,7 @@ class SettingsController extends Controller
                 'columns' => [],
                 'rows' => [],
                 'row_count' => null,
+                'connection' => $targetConnection,
                 'error' => $exception->getMessage(),
             ];
         }
@@ -1357,6 +1728,7 @@ class SettingsController extends Controller
                 'columns' => [],
                 'rows' => [],
                 'row_count' => 0,
+                'connection' => $targetConnection,
                 'error' => '',
             ];
         }
@@ -1367,9 +1739,9 @@ class SettingsController extends Controller
         $error = '';
 
         try {
-            $columns = Schema::getColumnListing($selected);
-            $rowCount = (int) DB::table($selected)->count();
-            $rows = DB::table($selected)
+            $columns = Schema::connection($targetConnection)->getColumnListing($selected);
+            $rowCount = (int) DB::connection($targetConnection)->table($selected)->count();
+            $rows = DB::connection($targetConnection)->table($selected)
                 ->limit(50)
                 ->get()
                 ->map(fn ($row) => (array) $row)
@@ -1385,6 +1757,7 @@ class SettingsController extends Controller
             'columns' => $columns,
             'rows' => $rows,
             'row_count' => $rowCount,
+            'connection' => $targetConnection,
             'error' => $error,
         ];
     }
@@ -1445,6 +1818,68 @@ class SettingsController extends Controller
 
         $tail = array_slice($allLines, -1 * max(20, $lines));
         return trim(implode(PHP_EOL, $tail));
+    }
+
+    private function storeBrandAsset(UploadedFile $file, string $kind): string
+    {
+        $extension = strtolower((string) ($file->getClientOriginalExtension() ?: $file->extension() ?: 'png'));
+        $safeExtension = preg_replace('/[^a-z0-9]/i', '', $extension) ?: 'png';
+        $filename = 'ui-' . $kind . '-' . now()->format('YmdHis') . '-' . Str::lower(Str::random(8)) . '.' . $safeExtension;
+
+        $directory = public_path('uploads/branding');
+        File::ensureDirectoryExists($directory, 0775, true);
+        $file->move($directory, $filename);
+
+        return asset('uploads/branding/' . $filename);
+    }
+
+    /**
+     * @return array<int, array{name:string,url:string,size_kb:string,modified_at:string}>
+     */
+    private function brandingMediaLibrary(int $limit = 60): array
+    {
+        $directory = public_path('uploads/branding');
+        if (!File::isDirectory($directory)) {
+            return [];
+        }
+
+        $allowedExtensions = ['jpg', 'jpeg', 'png', 'webp', 'svg', 'ico', 'gif'];
+        $files = collect(File::files($directory))
+            ->filter(function ($file) use ($allowedExtensions) {
+                return in_array(strtolower((string) $file->getExtension()), $allowedExtensions, true);
+            })
+            ->sortByDesc(fn ($file) => (int) $file->getMTime())
+            ->take(max(1, min($limit, 300)));
+
+        return $files->map(function ($file) {
+            $filename = (string) $file->getFilename();
+            return [
+                'name' => $filename,
+                'url' => asset('uploads/branding/' . $filename),
+                'size_kb' => number_format(((int) $file->getSize()) / 1024, 1),
+                'modified_at' => date('Y-m-d H:i', (int) $file->getMTime()),
+            ];
+        })->values()->all();
+    }
+
+    private function normalizeImportHeading(string $heading, int $index): string
+    {
+        $normalized = Str::of($heading)
+            ->lower()
+            ->replaceMatches('/[^a-z0-9]+/', '_')
+            ->trim('_')
+            ->value();
+
+        if ($normalized !== '') {
+            return $normalized;
+        }
+
+        return 'col_' . $index;
+    }
+
+    private function parseImportBoolean(string $value): bool
+    {
+        return in_array(strtolower(trim($value)), ['1', 'true', 'yes', 'on'], true);
     }
 
     /**

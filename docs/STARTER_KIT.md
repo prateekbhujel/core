@@ -214,7 +214,7 @@ document.addEventListener('hspa:error', (event) => {
 - Keep Telegram and ML threshold keys under source-controlled `.env.example` for consistent environments
 - Use `HAARRAY_ALLOW_SHELL_UI=false` in production unless absolutely required
 
-## 9. RBAC modal workflows
+## 9. RBAC and user pages
 
 - Role CRUD endpoints:
   - `settings.roles.store`
@@ -224,15 +224,25 @@ document.addEventListener('hspa:error', (event) => {
   - `settings.users.store`
   - `settings.users.update`
   - `settings.users.delete`
-- Role editing uses checkbox permission matrix in modal forms.
-- User editing supports role assignment, direct permissions, and notification channels.
+- Dedicated pages:
+  - `/settings/users`
+  - `/settings/rbac`
+- RBAC matrix uses radio controls per role/module (`off`, `view`, `manage`).
+- User page supports role assignment, direct permissions, notification channels, and import/export.
+- Sidebar supports multi-level navigation for Settings sections using query-driven links:
+  - `?tab=settings-app`
+  - `?tab=settings-profile`
+  - `?tab=settings-activity`
+  - `?tab=settings-notifications`
+  - `?tab=settings-system`
+  - `?tab=settings-diagnostics`
 
 ## 10. Diagnostics enhancements
 
-- Nested diagnostics tabs (`Overview`, `ML Lab`, `Data & Logs`) are isolated with scoped tab containers.
+- Diagnostics panel provides overview metrics, ML probe, DB browser, and log tail.
 - DB Browser adds phpMyAdmin-style read-only preview (table selector + first 50 rows).
-- User activity feed is recorded by middleware (`TrackUserActivity`) and shown in diagnostics.
-- Use diagnostics action `Fix Storage Permissions` to run:
+- User activity feed is recorded by middleware (`TrackUserActivity`) and shown in settings activity tab.
+- If storage permissions fail, run:
 
 ```bash
 chmod -R 0777 storage bootstrap/cache

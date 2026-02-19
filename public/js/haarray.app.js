@@ -34,12 +34,26 @@
 
   /* ── SIDEBAR ──────────────────────────────────────────── */
   const HSidebar = {
+    storageKey: 'h_nav_group_state',
+
     init() {
       $(document).on('click', '.h-menu-toggle', () => this.toggle());
       $(document).on('click', '.h-sidebar-overlay', () => this.close());
-      $(document).on('click', '.h-nav-item', () => {
-        if ($(window).width() <= 768) this.close();
+      $(document).on('click', '.h-nav-item, .h-nav-sub-item', (event) => {
+        if ($(window).width() > 768) return;
+        if ($(event.currentTarget).is('[data-nav-toggle]')) return;
+        this.close();
       });
+
+      $(document).on('click', '[data-nav-toggle]', (event) => {
+        event.preventDefault();
+        const key = String($(event.currentTarget).data('nav-toggle') || '').trim();
+        if (!key) return;
+        this.toggleGroup(key);
+      });
+
+      this.restoreGroupState();
+      this.syncGroups();
     },
 
     toggle() {
@@ -56,6 +70,76 @@
       $('#h-sidebar').removeClass('open');
       $('.h-sidebar-overlay').removeClass('show');
       $('body').css('overflow', '');
+    },
+
+    toggleGroup(key) {
+      const group = document.querySelector('[data-nav-group="' + key + '"]');
+      if (!group) return;
+      const expanded = group.dataset.expanded === '1';
+      group.dataset.manual = '1';
+      group.dataset.expanded = expanded ? '0' : '1';
+      this.persistGroupState();
+      this.syncGroups();
+    },
+
+    syncGroups() {
+      document.querySelectorAll('[data-nav-group]').forEach((group) => {
+        const hasActiveChild = Boolean(group.querySelector('.h-nav-sub-item.active'));
+        const expandedByUser = group.dataset.expanded === '1';
+        const manualOverride = group.dataset.manual === '1';
+        const shouldOpen = manualOverride ? expandedByUser : (hasActiveChild || expandedByUser);
+
+        group.classList.toggle('open', shouldOpen);
+
+        const toggle = group.querySelector('[data-nav-toggle]');
+        if (toggle) {
+          toggle.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+        }
+      });
+    },
+
+    restoreGroupState() {
+      let payload = {};
+      try {
+        payload = JSON.parse(localStorage.getItem(this.storageKey) || '{}');
+      } catch (error) {
+        payload = {};
+      }
+
+      if (!payload || typeof payload !== 'object') return;
+
+      document.querySelectorAll('[data-nav-group]').forEach((group) => {
+        const key = String(group.dataset.navGroup || '').trim();
+        if (!key || !payload[key]) return;
+
+        const state = payload[key];
+        if (state && typeof state === 'object') {
+          if (state.expanded === '1' || state.expanded === '0') {
+            group.dataset.expanded = state.expanded;
+          }
+          if (state.manual === '1' || state.manual === '0') {
+            group.dataset.manual = state.manual;
+          }
+        }
+      });
+    },
+
+    persistGroupState() {
+      const state = {};
+      document.querySelectorAll('[data-nav-group]').forEach((group) => {
+        const key = String(group.dataset.navGroup || '').trim();
+        if (!key) return;
+        state[key] = {
+          expanded: group.dataset.expanded === '1' ? '1' : '0',
+          manual: group.dataset.manual === '1' ? '1' : '0',
+        };
+      });
+
+      try {
+        localStorage.setItem(this.storageKey, JSON.stringify(state));
+      } catch (error) {
+        // Ignore storage errors.
+      }
     },
   };
 
@@ -176,6 +260,7 @@
     _isLoading: false,
     _bootstrapped: false,
     _knownUnreadIds: new Set(),
+    _lastAttentionAt: 0,
 
     init() {
       if (!$('#h-notif-tray').length) return;
@@ -368,6 +453,7 @@
 
       const first = newItems[0];
       HToast.info('New notification: ' + String(first.title || 'Update'));
+      this._triggerAttention();
       this._notifyBrowser(first);
     },
 
@@ -406,6 +492,58 @@
 
     _browserNotifyEnabled() {
       return Number($('body').data('browserNotifyEnabled') || 0) === 1;
+    },
+
+    _triggerAttention() {
+      const now = Date.now();
+      if (now - this._lastAttentionAt < 3000) return;
+      this._lastAttentionAt = now;
+
+      try {
+        if (navigator && typeof navigator.vibrate === 'function') {
+          navigator.vibrate([130, 45, 130]);
+        }
+      } catch (error) {
+        // Ignore unsupported vibration API.
+      }
+
+      this._playBeep();
+    },
+
+    _playBeep() {
+      try {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (typeof AudioContextClass !== 'function') return;
+
+        const context = new AudioContextClass();
+        const oscillator = context.createOscillator();
+        const gain = context.createGain();
+
+        oscillator.type = 'sine';
+        oscillator.frequency.value = 1120;
+        gain.gain.value = 0.03;
+
+        oscillator.connect(gain);
+        gain.connect(context.destination);
+
+        const now = context.currentTime;
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.exponentialRampToValueAtTime(0.03, now + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.25);
+
+        oscillator.start(now);
+        oscillator.stop(now + 0.26);
+
+        oscillator.onended = () => {
+          try {
+            context.close();
+          } catch (closeError) {
+            // Ignore close errors.
+          }
+        };
+      } catch (error) {
+        // Ignore autoplay or audio context restrictions.
+      }
     },
 
     _escape(input) {
@@ -967,6 +1105,9 @@
       this._syncRegion(doc, '#h-page-modals');
       this._syncRegion(doc, '#h-page-fab');
       this._syncRegion(doc, '#h-page-scripts');
+      this._syncRegion(doc, '#h-sidebar-brand');
+      this._syncFavicon(doc);
+      this._syncThemeColor(doc);
     },
 
     _syncCsrfToken(doc) {
@@ -1003,6 +1144,7 @@
         'swUrl',
         'iconSpriteUrl',
         'faviconUrl',
+        'themeColor',
       ];
 
       keys.forEach((key) => {
@@ -1017,6 +1159,47 @@
       const current = document.querySelector(selector);
       if (!incoming || !current) return;
       current.innerHTML = incoming.innerHTML;
+    },
+
+    _syncFavicon(doc) {
+      if (!doc) return;
+
+      const incoming = doc.querySelector('link[rel="icon"]');
+      if (!incoming) return;
+
+      const href = String(incoming.getAttribute('href') || '').trim();
+      if (!href) return;
+
+      let current = document.querySelector('link[rel="icon"]');
+      if (!current) {
+        current = document.createElement('link');
+        current.setAttribute('rel', 'icon');
+        document.head.appendChild(current);
+      }
+
+      current.setAttribute('href', href);
+    },
+
+    _syncThemeColor(doc) {
+      if (!doc) return;
+
+      const incomingMeta = doc.querySelector('meta[name="theme-color"]');
+      if (!incomingMeta) return;
+
+      const color = String(incomingMeta.getAttribute('content') || '').trim();
+      if (!/^#[0-9a-fA-F]{6}$/.test(color)) return;
+
+      let currentMeta = document.querySelector('meta[name="theme-color"]');
+      if (!currentMeta) {
+        currentMeta = document.createElement('meta');
+        currentMeta.setAttribute('name', 'theme-color');
+        document.head.appendChild(currentMeta);
+      }
+
+      currentMeta.setAttribute('content', color);
+      document.documentElement.style.setProperty('--gold', color);
+      document.documentElement.style.setProperty('--gold-dk', color);
+      document.body.dataset.themeColor = color;
     },
 
     _emitDocumentToasts(doc) {
@@ -1079,6 +1262,10 @@
 
         item.classList.toggle('active', isActive);
       });
+
+      if (window.HSidebar && typeof window.HSidebar.syncGroups === 'function') {
+        window.HSidebar.syncGroups();
+      }
     },
   };
 
@@ -1708,6 +1895,9 @@
       const endpoint = String($table.data('endpoint') || '').trim();
       const columns = this._columns($table);
       const pageLength = Number($table.data('pageLength') || 10);
+      const orderCol = Number($table.data('orderCol') || 0);
+      const orderDir = String($table.data('orderDir') || 'desc').toLowerCase() === 'asc' ? 'asc' : 'desc';
+      const lengthMenu = this._parseLengthMenu(String($table.data('lengthMenu') || '').trim());
 
       if ($.fn.DataTable.isDataTable(tableEl)) {
         const api = $table.DataTable();
@@ -1727,19 +1917,20 @@
         ordering: true,
         lengthChange: true,
         autoWidth: false,
+        responsive: typeof $.fn.dataTable.Responsive === 'function',
+        stateSave: true,
+        deferRender: true,
+        searchDelay: 280,
         pageLength: Number.isFinite(pageLength) ? Math.max(10, Math.min(pageLength, 100)) : 10,
-        lengthMenu: [
-          [10, 20, 50, 100],
-          [10, 20, 50, 100],
-        ],
+        lengthMenu,
         dom: "<'row align-items-center mb-2'<'col-md-6'l><'col-md-6'f>>" +
           "<'row'<'col-12'tr>>" +
           "<'row mt-2'<'col-md-5'i><'col-md-7'p>>",
-        order: [[0, 'desc']],
+        order: [[Number.isFinite(orderCol) ? Math.max(0, orderCol) : 0, orderDir]],
         language: {
           search: '',
           searchPlaceholder: 'Search...',
-          lengthMenu: 'Show _MENU_ entries',
+          lengthMenu: 'Show _MENU_ rows',
           emptyTable: 'No records found.',
         },
       };
@@ -1769,6 +1960,30 @@
       });
 
       return columns;
+    },
+
+    _parseLengthMenu(raw) {
+      if (!raw) {
+        return [
+          [10, 20, 50, 100],
+          [10, 20, 50, 100],
+        ];
+      }
+
+      const items = raw
+        .split(',')
+        .map((item) => Number(item.trim()))
+        .filter((item) => Number.isFinite(item) && item > 0);
+
+      if (!items.length) {
+        return [
+          [10, 20, 50, 100],
+          [10, 20, 50, 100],
+        ];
+      }
+
+      const unique = Array.from(new Set(items));
+      return [unique, unique];
     },
   };
 

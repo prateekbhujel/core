@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\UserActivity;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -82,6 +83,36 @@ class UiOptionsController extends Controller
                 return !empty($channels) ? implode(', ', $channels) : 'None';
             })
             ->editColumn('created_at', fn (User $user) => optional($user->created_at)->format('Y-m-d'))
+            ->toJson();
+    }
+
+    public function activityTable(Request $request): JsonResponse
+    {
+        $query = UserActivity::query()
+            ->with(['user:id,name,email'])
+            ->select([
+                'id',
+                'user_id',
+                'method',
+                'path',
+                'route_name',
+                'ip_address',
+                'meta',
+                'created_at',
+            ]);
+
+        return DataTables::eloquent($query)
+            ->addColumn('user', function (UserActivity $activity) {
+                $name = (string) ($activity->user->name ?? 'Unknown');
+                $email = (string) ($activity->user->email ?? '');
+
+                return $email !== '' ? $name . ' (' . $email . ')' : $name;
+            })
+            ->editColumn('method', fn (UserActivity $activity) => strtoupper((string) $activity->method))
+            ->addColumn('status', function (UserActivity $activity) {
+                return (string) data_get($activity->meta, 'status', '-');
+            })
+            ->editColumn('created_at', fn (UserActivity $activity) => optional($activity->created_at)->format('Y-m-d H:i:s'))
             ->toJson();
     }
 }

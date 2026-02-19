@@ -595,6 +595,9 @@
       const endpoint = String($table.data('endpoint') || '').trim();
       const columns = this._columns($table);
       const pageLength = Number($table.data('pageLength') || 10);
+      const orderCol = Number($table.data('orderCol') || 0);
+      const orderDir = String($table.data('orderDir') || 'desc').toLowerCase() === 'asc' ? 'asc' : 'desc';
+      const lengthMenu = this._parseLengthMenu(String($table.data('lengthMenu') || '').trim());
 
       if ($.fn.DataTable.isDataTable(tableEl)) {
         const api = $table.DataTable();
@@ -614,19 +617,20 @@
         ordering: true,
         lengthChange: true,
         autoWidth: false,
+        responsive: typeof $.fn.dataTable.Responsive === 'function',
+        stateSave: true,
+        deferRender: true,
+        searchDelay: 280,
         pageLength: Number.isFinite(pageLength) ? Math.max(10, Math.min(pageLength, 100)) : 10,
-        lengthMenu: [
-          [10, 20, 50, 100],
-          [10, 20, 50, 100],
-        ],
+        lengthMenu,
         dom: "<'row align-items-center mb-2'<'col-md-6'l><'col-md-6'f>>" +
           "<'row'<'col-12'tr>>" +
           "<'row mt-2'<'col-md-5'i><'col-md-7'p>>",
-        order: [[0, 'desc']],
+        order: [[Number.isFinite(orderCol) ? Math.max(0, orderCol) : 0, orderDir]],
         language: {
           search: '',
           searchPlaceholder: 'Search...',
-          lengthMenu: 'Show _MENU_ entries',
+          lengthMenu: 'Show _MENU_ rows',
           emptyTable: 'No records found.',
         },
       };
@@ -656,6 +660,30 @@
       });
 
       return columns;
+    },
+
+    _parseLengthMenu(raw) {
+      if (!raw) {
+        return [
+          [10, 20, 50, 100],
+          [10, 20, 50, 100],
+        ];
+      }
+
+      const items = raw
+        .split(',')
+        .map((item) => Number(item.trim()))
+        .filter((item) => Number.isFinite(item) && item > 0);
+
+      if (!items.length) {
+        return [
+          [10, 20, 50, 100],
+          [10, 20, 50, 100],
+        ];
+      }
+
+      const unique = Array.from(new Set(items));
+      return [unique, unique];
     },
   };
 
