@@ -1,4 +1,4 @@
-const CACHE_NAME = 'haarray-core-v0-1';
+const CACHE_NAME = 'haarray-core-v0-1-assets';
 const STATIC_MATCH = [/\/css\//, /\/js\//, /\/icons\//, /\/manifest\.json$/];
 
 self.addEventListener('install', (event) => {
@@ -32,18 +32,14 @@ self.addEventListener('fetch', (event) => {
 
   event.respondWith(
     caches.open(CACHE_NAME).then((cache) =>
-      cache.match(request).then((cached) => {
-        if (cached) return cached;
-
-        return fetch(request)
-          .then((response) => {
-            if (response && response.status === 200) {
-              cache.put(request, response.clone());
-            }
-            return response;
-          })
-          .catch(() => cached);
-      })
+      fetch(request)
+        .then((response) => {
+          if (response && response.status === 200) {
+            cache.put(request, response.clone());
+          }
+          return response;
+        })
+        .catch(() => cache.match(request))
     )
   );
 });

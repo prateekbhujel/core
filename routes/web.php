@@ -126,6 +126,10 @@ Route::middleware('auth')->group(function () {
         ->middleware('permission:view settings')
         ->name('ui.datatables.activities');
 
+    Route::get('/ui/datatables/roles', [UiOptionsController::class, 'rolesTable'])
+        ->middleware('permission:manage settings')
+        ->name('ui.datatables.roles');
+
     Route::get('/notifications/feed', [NotificationController::class, 'feed'])
         ->middleware('permission:view notifications')
         ->name('notifications.feed');

@@ -6,6 +6,9 @@ use App\Models\UserActivity;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+use Spatie\Permission\Models\Role;
 use Yajra\DataTables\Facades\DataTables;
 
 class UiOptionsController extends Controller
@@ -83,6 +86,46 @@ class UiOptionsController extends Controller
                 return !empty($channels) ? implode(', ', $channels) : 'None';
             })
             ->editColumn('created_at', fn (User $user) => optional($user->created_at)->format('Y-m-d'))
+            ->addColumn('actions', function (User $user) use ($request) {
+                if (!$request->user() || !$request->user()->can('manage users')) {
+                    return '<span class="h-muted">View only</span>';
+                }
+
+                $url = route('settings.users.index', ['user' => $user->id]) . '#user-editor';
+                return '<a class="btn btn-outline-secondary btn-sm" data-spa href="' . e($url) . '">Edit</a>';
+            })
+            ->rawColumns(['actions'])
+            ->toJson();
+    }
+
+    public function rolesTable(Request $request): JsonResponse
+    {
+        $roles = Role::query()
+            ->with('permissions:id,name')
+            ->orderBy('id', 'desc')
+            ->get();
+
+        $roleUserCounts = $this->roleUserCounts();
+        $protected = ['super-admin', 'admin'];
+
+        $rows = $roles->map(function (Role $role) use ($roleUserCounts, $protected, $request) {
+            $isProtected = in_array((string) $role->name, $protected, true);
+            $editUrl = route('settings.rbac', ['role' => $role->id]) . '#role-editor';
+
+            return [
+                'id' => $role->id,
+                'name' => strtoupper((string) $role->name),
+                'permissions_count' => $role->permissions->count(),
+                'users_count' => (int) ($roleUserCounts[$role->id] ?? 0),
+                'is_protected' => $isProtected ? 'Yes' : 'No',
+                'actions' => $request->user() && $request->user()->can('manage settings')
+                    ? '<a class="btn btn-outline-secondary btn-sm" data-spa href="' . e($editUrl) . '">Edit</a>'
+                    : '<span class="h-muted">View only</span>',
+            ];
+        })->values();
+
+        return DataTables::collection($rows)
+            ->rawColumns(['actions'])
             ->toJson();
     }
 
@@ -114,5 +157,25 @@ class UiOptionsController extends Controller
             })
             ->editColumn('created_at', fn (UserActivity $activity) => optional($activity->created_at)->format('Y-m-d H:i:s'))
             ->toJson();
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    private function roleUserCounts(): array
+    {
+        $tables = config('permission.table_names', []);
+        $pivotTable = (string) ($tables['model_has_roles'] ?? '');
+        if ($pivotTable === '' || !Schema::hasTable($pivotTable)) {
+            return [];
+        }
+
+        return DB::table($pivotTable)
+            ->select('role_id', DB::raw('COUNT(*) AS total'))
+            ->where('model_type', User::class)
+            ->groupBy('role_id')
+            ->pluck('total', 'role_id')
+            ->map(fn ($value) => (int) $value)
+            ->all();
     }
 }

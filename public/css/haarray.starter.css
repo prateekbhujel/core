@@ -1250,6 +1250,101 @@
 }
 
 /* -------------------------
+   Bootstrap theme bridge
+   ------------------------- */
+:root,
+[data-theme='dark'],
+[data-theme='light'] {
+  --bs-primary: var(--gold);
+  --bs-secondary: #7f8aa3;
+  --bs-success: var(--green);
+  --bs-danger: var(--red);
+  --bs-warning: var(--gold);
+  --bs-info: var(--teal);
+  --bs-light: var(--bg2);
+  --bs-dark: var(--bg0);
+  --bs-border-color: var(--bd);
+  --bs-body-bg: var(--bg0);
+  --bs-body-color: var(--t1);
+  --bs-link-color: var(--gold);
+  --bs-link-hover-color: var(--gold-dk);
+  --bs-emphasis-color: var(--t1);
+  --bs-secondary-color: var(--t2);
+  --bs-tertiary-bg: var(--bg3);
+  --bs-table-bg: transparent;
+  --bs-table-color: var(--t1);
+  --bs-table-border-color: var(--bd);
+  --bs-modal-bg: var(--bg2);
+  --bs-modal-color: var(--t1);
+}
+
+.table {
+  --bs-table-bg: transparent;
+  --bs-table-color: var(--t1);
+  --bs-table-border-color: var(--bd);
+  --bs-table-striped-bg: rgba(255, 255, 255, 0.02);
+  --bs-table-striped-color: var(--t1);
+  --bs-table-hover-bg: rgba(255, 255, 255, 0.04);
+  --bs-table-hover-color: var(--t1);
+}
+
+.form-control,
+.form-select,
+.input-group-text,
+.dropdown-menu,
+.modal-content,
+.offcanvas {
+  background: var(--bg2);
+  color: var(--t1);
+  border-color: var(--bd);
+}
+
+.form-control::placeholder {
+  color: var(--t3);
+}
+
+.form-control:focus,
+.form-select:focus {
+  background: var(--bg2);
+  color: var(--t1);
+  border-color: rgba(245, 166, 35, 0.55);
+  box-shadow: 0 0 0 0.18rem rgba(245, 166, 35, 0.18);
+}
+
+.form-control-color {
+  padding: 0.35rem;
+  min-width: 56px;
+}
+
+[data-theme='dark'] .form-control-color {
+  background: var(--bg2);
+}
+
+[data-theme='dark'] .btn-outline-secondary {
+  color: var(--t2);
+  border-color: var(--bd2);
+}
+
+[data-theme='dark'] .btn-outline-secondary:hover {
+  color: var(--t1);
+  background: var(--bg3);
+  border-color: var(--bd2);
+}
+
+[data-theme='dark'] .dropdown-item {
+  color: var(--t1);
+}
+
+[data-theme='dark'] .dropdown-item:hover {
+  background: var(--bg3);
+  color: var(--t1);
+}
+
+[data-theme='dark'] .text-muted {
+  color: var(--t3) !important;
+}
+
+/* -------------------------
    Responsive
    ------------------------- */
 @media (max-width: 1080px) {

@@ -16,6 +16,7 @@
 }
 
 [data-theme="dark"] {
+  color-scheme: dark;
   --bg0: #06070d;  --bg1: #0d1019;  --bg2: #131827;
   --bg3: #1c2234;  --bg4: #232b40;
   --bd:  rgba(255,255,255,.08);
@@ -25,6 +26,7 @@
 }
 
 [data-theme="light"] {
+  color-scheme: light;
   --bg0: #f3f5fb;  --bg1: #fafbff;  --bg2: #ffffff;
   --bg3: #f1f4fc;  --bg4: #e8edf8;
   --bd:  rgba(16,22,38,.10);
@@ -98,12 +100,18 @@ input,select,textarea { font-family:var(--fb); }
   flex-shrink:0; box-shadow: 0 4px 18px rgba(245,166,35,.32);
 }
 .h-brand-logo {
-  width:38px; height:38px;
+  width:38px !important;
+  height:38px !important;
+  min-width:38px;
+  min-height:38px;
+  max-width:38px;
+  max-height:38px;
   border-radius:11px;
   object-fit:cover;
   border:1px solid var(--bd2);
   box-shadow: 0 4px 18px rgba(245,166,35,.24);
   flex-shrink:0;
+  display:block;
 }
 .h-brand-name { font-family:var(--fd); font-weight:800; font-size:16px; color:var(--t1); }
 .h-brand-sub  { font-family:var(--fm); font-size:9px; color:var(--t3); letter-spacing:1.2px; text-transform:uppercase; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:150px; }

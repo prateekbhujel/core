@@ -79,7 +79,7 @@
   {{-- Brand --}}
   <div class="h-brand" id="h-sidebar-brand">
     @if($brandLogo !== '')
-      <img src="{{ $brandLogo }}" alt="{{ $brandDisplayName }} logo" class="h-brand-logo">
+      <img src="{{ $brandLogo }}" alt="{{ $brandDisplayName }} logo" class="h-brand-logo" width="38" height="38">
     @else
       <div class="h-brand-mark">{{ strtoupper(substr($brandMark, 0, 1)) }}</div>
     @endif
@@ -142,101 +142,34 @@
       </a>
     @endcan
     @if(auth()->user()->can('view settings'))
-      @php
-        $isSettingsRoute = request()->routeIs('settings.*');
-        $isUsersRoute = request()->routeIs('settings.users.*');
-        $isRbacRoute = request()->routeIs('settings.rbac');
-        $activeSettingsTab = (string) request()->query('tab', 'settings-app');
-      @endphp
-      <div
-        class="h-nav-group {{ $isSettingsRoute ? 'open' : '' }}"
-        data-nav-group="settings"
-        data-expanded="{{ $isSettingsRoute ? '1' : '0' }}"
-        data-manual="0"
+      <a
+        data-spa
+        href="{{ route('settings.index', ['tab' => 'settings-app']) }}"
+        class="h-nav-item {{ request()->routeIs('settings.index') ? 'active' : '' }}"
       >
-        <button
-          type="button"
-          class="h-nav-item h-nav-parent {{ $isSettingsRoute ? 'active' : '' }}"
-          data-nav-toggle="settings"
-          aria-expanded="{{ $isSettingsRoute ? 'true' : 'false' }}"
+        <i class="h-nav-icon fa-solid fa-sliders fa-fw"></i>
+        Settings
+      </a>
+      @if(auth()->user()->can('view users'))
+        <a
+          data-spa
+          href="{{ route('settings.users.index') }}"
+          class="h-nav-item {{ request()->routeIs('settings.users.*') ? 'active' : '' }}"
         >
-          <span class="h-row" style="gap:9px;">
-            <i class="h-nav-icon fa-solid fa-sliders fa-fw"></i>
-            Settings
-          </span>
-          <i class="fa-solid fa-chevron-right h-nav-caret"></i>
-        </button>
-
-        <div class="h-nav-sub">
-          <a
-            data-spa
-            href="{{ route('settings.index', ['tab' => 'settings-app']) }}"
-            data-match-query="tab=settings-app"
-            class="h-nav-sub-item {{ request()->routeIs('settings.index') && $activeSettingsTab === 'settings-app' ? 'active' : '' }}"
-          >
-            <i class="fa-solid fa-palette fa-fw"></i>
-            App Settings
-          </a>
-          <a
-            data-spa
-            href="{{ route('settings.index', ['tab' => 'settings-activity']) }}"
-            data-match-query="tab=settings-activity"
-            class="h-nav-sub-item {{ request()->routeIs('settings.index') && $activeSettingsTab === 'settings-activity' ? 'active' : '' }}"
-          >
-            <i class="fa-solid fa-chart-line fa-fw"></i>
-            Activity
-          </a>
-          <a
-            data-spa
-            href="{{ route('settings.index', ['tab' => 'settings-notifications']) }}"
-            data-match-query="tab=settings-notifications"
-            class="h-nav-sub-item {{ request()->routeIs('settings.index') && $activeSettingsTab === 'settings-notifications' ? 'active' : '' }}"
-          >
-            <i class="fa-solid fa-bell fa-fw"></i>
-            Notifications
-          </a>
-          @if(auth()->user()->can('manage settings'))
-            <a
-              data-spa
-              href="{{ route('settings.index', ['tab' => 'settings-system']) }}"
-              data-match-query="tab=settings-system"
-              class="h-nav-sub-item {{ request()->routeIs('settings.index') && $activeSettingsTab === 'settings-system' ? 'active' : '' }}"
-            >
-              <i class="fa-solid fa-gear fa-fw"></i>
-              System
-            </a>
-            <a
-              data-spa
-              href="{{ route('settings.index', ['tab' => 'settings-diagnostics']) }}"
-              data-match-query="tab=settings-diagnostics"
-              class="h-nav-sub-item {{ request()->routeIs('settings.index') && $activeSettingsTab === 'settings-diagnostics' ? 'active' : '' }}"
-            >
-              <i class="fa-solid fa-stethoscope fa-fw"></i>
-              Diagnostics
-            </a>
-          @endif
-          @if(auth()->user()->can('view users'))
-            <a
-              data-spa
-              href="{{ route('settings.users.index') }}"
-              class="h-nav-sub-item {{ $isUsersRoute ? 'active' : '' }}"
-            >
-              <i class="fa-solid fa-users fa-fw"></i>
-              Users
-            </a>
-          @endif
-          @if(auth()->user()->can('manage settings'))
-            <a
-              data-spa
-              href="{{ route('settings.rbac') }}"
-              class="h-nav-sub-item {{ $isRbacRoute ? 'active' : '' }}"
-            >
-              <i class="fa-solid fa-user-lock fa-fw"></i>
-              Access & RBAC
-            </a>
-          @endif
-        </div>
-      </div>
+          <i class="h-nav-icon fa-solid fa-users fa-fw"></i>
+          Users
+        </a>
+      @endif
+      @if(auth()->user()->can('manage settings'))
+        <a
+          data-spa
+          href="{{ route('settings.rbac') }}"
+          class="h-nav-item {{ request()->routeIs('settings.rbac') ? 'active' : '' }}"
+        >
+          <i class="h-nav-icon fa-solid fa-user-lock fa-fw"></i>
+          Access & RBAC
+        </a>
+      @endif
     @endif
   </div>
 
@@ -283,22 +216,12 @@
   </header>
 
   {{-- Flash messages --}}
-  <div id="h-page-flash">
+  <div id="h-page-flash" class="visually-hidden" aria-hidden="true">
     @if(session('success'))
-    <div style="padding:14px 28px 0;">
-      <div class="h-alert success">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-        {{ session('success') }}
-      </div>
-    </div>
+      <div class="h-alert success">{{ session('success') }}</div>
     @endif
     @if(session('error'))
-    <div style="padding:14px 28px 0;">
-      <div class="h-alert error">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        {{ session('error') }}
-      </div>
-    </div>
+      <div class="h-alert error">{{ session('error') }}</div>
     @endif
   </div>
 

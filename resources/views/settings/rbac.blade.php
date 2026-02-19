@@ -27,6 +27,158 @@
     </div>
   @else
     <div class="h-card-soft mb-3">
+      <div class="head h-split">
+        <div>
+          <div style="font-family:var(--fd);font-size:16px;font-weight:700;">Role Directory DataTable</div>
+          <div class="h-muted" style="font-size:13px;">Server-side styled table for roles and quick edit navigation.</div>
+        </div>
+      </div>
+      <div class="body">
+        <div class="table-responsive">
+          <table
+            class="table table-sm align-middle"
+            data-h-datatable
+            data-endpoint="{{ route('ui.datatables.roles') }}"
+            data-page-length="10"
+            data-length-menu="10,20,50,100"
+            data-order-col="0"
+            data-order-dir="desc"
+          >
+            <thead>
+              <tr>
+                <th data-col="id">ID</th>
+                <th data-col="name">Role</th>
+                <th data-col="permissions_count">Permissions</th>
+                <th data-col="users_count">Users</th>
+                <th data-col="is_protected">Protected</th>
+                <th data-col="actions">Action</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="h-grid-main h-rbac-grid mb-3" id="role-editor">
+      <div class="h-card-soft mb-3">
+        <div class="head">
+          <div style="font-family:var(--fd);font-size:16px;font-weight:700;">Create Role</div>
+        </div>
+        <div class="body">
+          <form method="POST" action="{{ route('settings.roles.store') }}" data-spa>
+            @csrf
+            <div class="mb-2">
+              <label class="h-label" style="display:block;">Role Name</label>
+              <input type="text" name="name" class="form-control" placeholder="e.g. auditor" required>
+            </div>
+
+            <div class="mb-2">
+              <label class="h-label" style="display:block;">Permissions</label>
+              <select name="permissions[]" class="form-select" data-h-select multiple>
+                @foreach($permissionOptions as $permissionName)
+                  <option value="{{ $permissionName }}">{{ $permissionName }}</option>
+                @endforeach
+              </select>
+            </div>
+
+            <div class="d-flex justify-content-end mt-3">
+              <button type="submit" class="btn btn-primary" data-busy-text="Creating...">
+                <i class="fa-solid fa-plus me-2"></i>
+                Create Role
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <div>
+        @if($editRole)
+          <div class="h-card-soft mb-3" id="role-editor-card">
+            <div class="head">
+              <div style="font-family:var(--fd);font-size:16px;font-weight:700;">Edit Role: {{ strtoupper($editRole->name) }}</div>
+            </div>
+            <div class="body">
+              <form method="POST" action="{{ route('settings.roles.update', $editRole) }}" data-spa>
+                @csrf
+                @method('PUT')
+
+                <div class="mb-2">
+                  <label class="h-label" style="display:block;">Role Name</label>
+                  <input type="text" name="name" class="form-control" value="{{ old('name', $editRole->name) }}" required>
+                </div>
+
+                @php $selectedPermissions = $editRole->permissions->pluck('name')->values()->all(); @endphp
+                <div class="mb-2">
+                  <label class="h-label" style="display:block;">Permissions</label>
+                  <select name="permissions[]" class="form-select" data-h-select multiple>
+                    @foreach($permissionOptions as $permissionName)
+                      <option value="{{ $permissionName }}" @selected(in_array($permissionName, $selectedPermissions, true))>{{ $permissionName }}</option>
+                    @endforeach
+                  </select>
+                </div>
+
+                <div class="d-flex justify-content-end mt-3">
+                  <button type="submit" class="btn btn-primary" data-busy-text="Updating...">
+                    <i class="fa-solid fa-floppy-disk me-2"></i>
+                    Update Role
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        @else
+          <div class="h-note mb-3">Select a role from table and click <strong>Edit</strong> to load editor here.</div>
+        @endif
+
+        <div class="h-card-soft mb-3">
+          <div class="head">
+            <div style="font-family:var(--fd);font-size:16px;font-weight:700;">Delete Roles</div>
+            <div class="h-muted" style="font-size:13px;">Protected roles and roles with assigned users cannot be deleted.</div>
+          </div>
+          <div class="body">
+            <div class="table-responsive">
+              <table class="table table-sm align-middle">
+                <thead>
+                  <tr>
+                    <th>Role</th>
+                    <th>Users</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @forelse($roleCatalog as $roleRow)
+                    @php
+                      $roleName = (string) $roleRow['name'];
+                      $isProtected = in_array($roleName, $protectedRoleNames, true);
+                    @endphp
+                    <tr>
+                      <td>{{ strtoupper($roleName) }}</td>
+                      <td>{{ (int) $roleRow['users_count'] }}</td>
+                      <td>
+                        <form method="POST" action="{{ route('settings.roles.delete', $roleRow['id']) }}" data-spa data-confirm="true" data-confirm-title="Delete role {{ $roleName }}?" data-confirm-text="This cannot be undone." data-confirm-ok="Delete" data-confirm-cancel="Cancel">
+                          @csrf
+                          @method('DELETE')
+                          <button type="submit" class="btn btn-outline-danger btn-sm" @disabled($isProtected || ((int) $roleRow['users_count']) > 0)>
+                            Delete
+                          </button>
+                        </form>
+                      </td>
+                    </tr>
+                  @empty
+                    <tr>
+                      <td colspan="3" class="h-muted">No roles available.</td>
+                    </tr>
+                  @endforelse
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="h-card-soft mb-3">
       <div class="head">
         <div style="font-family:var(--fd);font-size:16px;font-weight:700;">Access Matrix</div>
         <div class="h-muted" style="font-size:13px;">Each role can be set to <strong>None / View / Manage</strong> per module using radio controls.</div>
@@ -124,138 +276,22 @@
         </form>
       </div>
     </div>
-
-    <div class="h-grid-main h-rbac-grid">
-      <div class="h-card-soft mb-3">
-        <div class="head h-split">
-          <div>
-            <div style="font-family:var(--fd);font-size:16px;font-weight:700;">Role Directory</div>
-            <div class="h-muted" style="font-size:13px;">Edit/delete roles and jump directly to form editor.</div>
-          </div>
-        </div>
-
-        <div class="body">
-          <div class="table-responsive">
-            <table class="table table-sm align-middle">
-              <thead>
-                <tr>
-                  <th>Role</th>
-                  <th>Permissions</th>
-                  <th>Users</th>
-                  <th style="min-width:160px;">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                @forelse($roleCatalog as $roleRow)
-                  @php
-                    $roleName = (string) $roleRow['name'];
-                    $isProtected = in_array($roleName, $protectedRoleNames, true);
-                  @endphp
-                  <tr>
-                    <td>
-                      <div style="font-weight:700;">{{ strtoupper($roleName) }}</div>
-                      @if($isProtected)
-                        <div class="h-muted" style="font-size:11px;">Protected</div>
-                      @endif
-                    </td>
-                    <td><span class="h-pill teal">{{ $roleRow['permissions_count'] }}</span></td>
-                    <td>{{ $roleRow['users_count'] }}</td>
-                    <td>
-                      <div class="d-flex gap-2 flex-wrap">
-                        <a data-spa href="{{ route('settings.rbac', ['role' => $roleRow['id']]) }}" class="btn btn-outline-secondary btn-sm">
-                          Edit
-                        </a>
-
-                        <form method="POST" action="{{ route('settings.roles.delete', $roleRow['id']) }}" data-spa data-confirm="true" data-confirm-title="Delete role {{ $roleName }}?" data-confirm-text="This cannot be undone." data-confirm-ok="Delete" data-confirm-cancel="Cancel">
-                          @csrf
-                          @method('DELETE')
-                          <button type="submit" class="btn btn-outline-danger btn-sm" @disabled($isProtected || ((int) $roleRow['users_count']) > 0)>
-                            Delete
-                          </button>
-                        </form>
-                      </div>
-                    </td>
-                  </tr>
-                @empty
-                  <tr>
-                    <td colspan="4" class="h-muted">No roles available.</td>
-                  </tr>
-                @endforelse
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-      <div>
-        <div class="h-card-soft mb-3">
-          <div class="head">
-            <div style="font-family:var(--fd);font-size:16px;font-weight:700;">Create Role</div>
-          </div>
-          <div class="body">
-            <form method="POST" action="{{ route('settings.roles.store') }}" data-spa>
-              @csrf
-              <div class="mb-2">
-                <label class="h-label" style="display:block;">Role Name</label>
-                <input type="text" name="name" class="form-control" placeholder="e.g. auditor" required>
-              </div>
-
-              <div class="mb-2">
-                <label class="h-label" style="display:block;">Permissions</label>
-                <select name="permissions[]" class="form-select" data-h-select multiple>
-                  @foreach($permissionOptions as $permissionName)
-                    <option value="{{ $permissionName }}">{{ $permissionName }}</option>
-                  @endforeach
-                </select>
-              </div>
-
-              <div class="d-flex justify-content-end mt-3">
-                <button type="submit" class="btn btn-primary" data-busy-text="Creating...">
-                  <i class="fa-solid fa-plus me-2"></i>
-                  Create Role
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-
-        @if($editRole)
-          <div class="h-card-soft mb-3">
-            <div class="head">
-              <div style="font-family:var(--fd);font-size:16px;font-weight:700;">Edit Role: {{ strtoupper($editRole->name) }}</div>
-            </div>
-            <div class="body">
-              <form method="POST" action="{{ route('settings.roles.update', $editRole) }}" data-spa>
-                @csrf
-                @method('PUT')
-
-                <div class="mb-2">
-                  <label class="h-label" style="display:block;">Role Name</label>
-                  <input type="text" name="name" class="form-control" value="{{ old('name', $editRole->name) }}" required>
-                </div>
-
-                @php $selectedPermissions = $editRole->permissions->pluck('name')->values()->all(); @endphp
-                <div class="mb-2">
-                  <label class="h-label" style="display:block;">Permissions</label>
-                  <select name="permissions[]" class="form-select" data-h-select multiple>
-                    @foreach($permissionOptions as $permissionName)
-                      <option value="{{ $permissionName }}" @selected(in_array($permissionName, $selectedPermissions, true))>{{ $permissionName }}</option>
-                    @endforeach
-                  </select>
-                </div>
-
-                <div class="d-flex justify-content-end mt-3">
-                  <button type="submit" class="btn btn-primary" data-busy-text="Updating...">
-                    <i class="fa-solid fa-floppy-disk me-2"></i>
-                    Update Role
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        @endif
-      </div>
-    </div>
   @endif
 </div>
+@endsection
+
+@section('scripts')
+<script>
+(function () {
+  const params = new URLSearchParams(window.location.search);
+  if (!params.get('role')) return;
+
+  const target = document.getElementById('role-editor-card') || document.getElementById('role-editor');
+  if (!target) return;
+
+  setTimeout(() => {
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 120);
+})();
+</script>
 @endsection
