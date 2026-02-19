@@ -31,7 +31,7 @@ return [
     */
     'telegram' => [
         'token'       => env('TELEGRAM_BOT_TOKEN'),
-        'webhook_url' => env('APP_URL') . '/api/telegram/webhook',
+        'webhook_url' => env('TELEGRAM_BOT_WEBHOOK_URL', env('APP_URL') . '/api/telegram/webhook'),
         'bot_username' => env('TELEGRAM_BOT_USERNAME', 'HariLogBot'),
     ],
 
@@ -65,10 +65,10 @@ return [
     |--------------------------------------------------------------------------
     */
     'ml' => [
-        'idle_cash_threshold'    => 5000,  // NPR — trigger suggestion if idle cash > this
-        'food_budget_warning'    => 0.35,  // Warn if food > 35% of expenses
-        'savings_rate_target'    => 0.30,  // 30% savings rate target
-        'retrain_every_days'     => 7,     // Retrain ML model every 7 days
+        'idle_cash_threshold'    => env('HAARRAY_ML_IDLE_CASH_THRESHOLD', 5000),  // NPR — trigger suggestion if idle cash > this
+        'food_budget_warning'    => env('HAARRAY_ML_FOOD_BUDGET_WARNING', 0.35),  // Warn if food > 35% of expenses
+        'savings_rate_target'    => env('HAARRAY_ML_SAVINGS_RATE_TARGET', 0.30),  // 30% savings rate target
+        'retrain_every_days'     => env('HAARRAY_ML_RETRAIN_DAYS', 7),             // Retrain ML model every 7 days
     ],
 
     /*

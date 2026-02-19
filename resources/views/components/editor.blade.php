@@ -1,4 +1,11 @@
-@props(['name' => 'body', 'value' => '', 'label' => null, 'bare' => false])
+@props([
+  'name' => 'body',
+  'value' => '',
+  'label' => null,
+  'bare' => false,
+  'placeholder' => 'Write something...',
+  'paste' => 'plain',
+])
 
 <div class="h-editor-wrap">
   @if($label)
@@ -8,6 +15,8 @@
     class="h-editor {{ $bare ? 'h-editor--bare' : '' }}"
     data-editor
     data-editor-name="{{ $name }}"
+    data-placeholder="{{ $placeholder }}"
+    data-paste="{{ $paste }}"
     role="textbox"
     aria-multiline="true"
     contenteditable="true"

@@ -1,276 +1,135 @@
 # HAARRAY CORE
 
-### Laravel Starter Kit
+Laravel starter kit for Haarray products with progressive SPA behavior, reusable UI primitives, and custom frontend components.
 
-**HariLog — In memory of Hari Bahadur Bhujel**
+## Why this starter
 
----
+- Server-first Laravel architecture (controllers return normal Blade/redirect responses)
+- Progressive enhancement via lightweight SPA engine (`HSPA`)
+- Custom icon library (SVG sprite + Blade component)
+- Font Awesome class-based icon support (`<i class="fa-...">`)
+- Custom Select2-style component (`HSelect`)
+- Remote Select2 (server-side AJAX + image/avatar results)
+- Custom CKEditor-style component (`HEditor`)
+- Bootstrap + Font Awesome integration (open source)
+- Dedicated sidebar docs + settings pages
+- UI-based `.env` settings editor for whitelisted keys
 
-## Overview
+## Tech profile
 
-`haarray-core` is the official Laravel foundation for all Haarray applications.
+- Laravel 12
+- Blade templates
+- jQuery (small runtime)
+- Bootstrap 5 + Font Awesome 6 (CDN, open source)
+- Custom CSS design system (`haarray.css` + `haarray.starter.css` + `haarray.bootstrap-bridge.css`)
+- Vite available for future asset pipeline expansion
 
-It includes:
-
-* Modern design system (Dark + Light)
-* Authentication-ready layout
-* Lightweight progressive SPA engine
-* Reusable Blade structure
-* Toasts, modals, helpers
-* Zero-controller-change enhancement layer
-
-Every Haarray product — HariLog, HariCMS, SaaS tools — starts here.
-
----
-
-## Philosophy
-
-### Progressive First
-
-All routes work normally without JavaScript.
-
-### Zero Controller Changes
-
-You do **not** need to return JSON.
-
-Standard Laravel responses work automatically:
-
-```php
-return view(...);
-return redirect(...);
-return back()->withErrors(...);
-```
-
-The SPA layer enhances them without modifying controllers.
-
-### One System, Many Apps
-
-One design system shared across all Haarray products.
-
----
-
-# 🚀 Quick Installation
-
-## 1️⃣ Clone Repository
-
-```bash
-git clone https://github.com/haarray/core.git
-cd core
-```
-
----
-
-## 2️⃣ Install Dependencies
+## Quick start
 
 ```bash
 composer install
-npm install
-```
-
----
-
-## 3️⃣ Setup Environment
-
-```bash
 cp .env.example .env
 php artisan key:generate
-```
-
-Update your database credentials in `.env`.
-
----
-
-## 4️⃣ Run Migrations
-
-```bash
 php artisan migrate
-```
-
----
-
-## 5️⃣ Link Storage
-
-```bash
-php artisan storage:link
-```
-
----
-
-## 6️⃣ Build Assets
-
-```bash
-npm run build
-```
-
-For development:
-
-```bash
-npm run dev
-```
-
----
-
-## 7️⃣ Start Server
-
-```bash
 php artisan serve
 ```
 
-Visit:
+Open: `http://127.0.0.1:8000`
 
-```
-http://127.0.0.1:8000
-```
+## Starter architecture
 
-You are ready.
-
----
-
-# Features
-
-## 🎨 Design System
-
-* CSS variables
-* Dark & light themes
-* Sidebar layout
-* Responsive
-* Auth-ready
-* Minimal and modern
-
----
-
-## ⚡ Lightweight SPA Engine
-
-* History `pushState`
-* Partial page replacement (`#h-spa-content`)
-* AJAX form interception
-* CSRF auto-handling
-* Validation error handling
-* Toast notifications
-* Redirect detection
-* Progressive fallback
-
-Works with standard Laravel responses.
-
----
-
-## 🧩 UI Components
-
-* `HTheme`
-* `HToast`
-* `HModal`
-* `HSPA`
-* `HApi`
-* `HUtils`
-
----
-
-# JavaScript API
-
-## Theme
-
-```js
-HTheme.apply("dark");
-HTheme.apply("light");
-```
-
----
-
-## Toast
-
-```js
-HToast.success("Saved!");
-HToast.error("Something went wrong");
-HToast.warning("Be careful");
-HToast.info("Heads up");
-```
-
----
-
-## Modal
-
-```js
-HModal.open("modal-id");
-HModal.close("modal-id");
-```
-
----
-
-## SPA Navigation
-
-```js
-HSPA.navigate("/transactions");
-```
-
----
-
-## API Helper
-
-```js
-HApi.post("/transactions", { amount: 200 }, {
-  success(res){},
-  error(err){}
-});
-```
-
----
-
-## Form Submission
-
-```js
-HApi.submitForm($('#my-form'), {
-  success(){},
-  error(){}
-});
-```
-
----
-
-## Utilities
-
-```js
-HUtils.formatNPR(5200);
-```
-
----
-
-# 📖 Documentation
-
-Detailed SPA engine documentation:
-
-👉 **See `docs/SPA.md`**
-
-This explains:
-
-* How navigation interception works
-* How redirects are handled
-* How validation errors are parsed
-* Lifecycle hooks
-* When not to use SPA
-* Progressive fallback strategy
-
----
-
-# Project Structure
-
-```
+```txt
 haarray-core/
 ├── app/
 ├── public/
-├── resources/
-│   └── views/
-├── routes/
+│   ├── css/
+│   │   ├── haarray.css
+│   │   ├── haarray.starter.css
+│   │   └── haarray.bootstrap-bridge.css
+│   ├── js/
+│   │   ├── haarray.js
+│   │   └── haarray.plugins.js
+│   └── icons/icons.svg
+├── app/Http/Controllers/SettingsController.php
+├── resources/views/
+│   ├── layouts/haarray.blade.php
+│   ├── components/
+│   │   ├── icon.blade.php
+│   │   ├── editor.blade.php
+│   │   ├── select.blade.php
+│   │   └── confirm-modal.blade.php
+│   ├── docs/starter-kit.blade.php
+│   └── settings/index.blade.php
 ├── docs/
-│   └── SPA.md
-├── composer.json
-└── README.md
+│   ├── SPA.md
+│   └── STARTER_KIT.md
+└── routes/web.php
 ```
 
----
+## Core frontend modules
 
-# Built For
+`public/js/haarray.js`
 
-* HariLog
-* HariCMS
+- `HTheme`: dark/light mode state
+- `HToast`: notifications
+- `HModal`: modal controls
+- `HApi`: AJAX/form helper
+- `HSPA`: partial navigation + lifecycle events
 
----
+`public/js/haarray.plugins.js`
+
+- `HConfirm`: confirmation flow for links/forms
+- `HSelect`: searchable single/multi select
+- `HSelectRemote`: Select2 AJAX mode with image support
+- `HEditor`: rich text editor with hidden field sync
+- `HIcons`: runtime icon helper
+- `HSvgPie`: lightweight pie charts
+
+## SPA lifecycle hooks
+
+Use these events for page-level re-initialization:
+
+```js
+document.addEventListener('hspa:beforeLoad', (event) => {
+  console.log(event.detail.url);
+});
+
+document.addEventListener('hspa:afterSwap', (event) => {
+  console.log(event.detail.container);
+});
+```
+
+## Reusable Blade components
+
+```blade
+<x-icon name="dashboard" class="h-icon h-icon--lg" label="Dashboard" />
+<i class="fa-brands fa-facebook-f"></i>
+
+<x-select
+  name="currency"
+  label="Currency"
+  :options="['NPR' => 'Nepalese Rupee', 'USD' => 'US Dollar']"
+  placeholder="Choose currency"
+/>
+
+<x-editor name="notes" label="Notes" placeholder="Write notes..." />
+```
+
+## Production readiness checklist
+
+- Set `APP_ENV=production` and `APP_DEBUG=false`
+- Run `php artisan config:cache`, `route:cache`, `view:cache`
+- Build and serve versioned assets (`npm run build` when bundling custom assets)
+- Ensure DB credentials, queue, mail, and cache drivers are configured
+- Add automated tests for your domain modules before deployment
+
+## Documentation
+
+- Starter docs page: `/docs` (inside app)
+- Settings page: `/settings` (inside app, authenticated)
+- Technical docs: `docs/STARTER_KIT.md`
+- SPA details: `docs/SPA.md`
+
+## Philosophy
+
+Haarray Core is not a heavy frontend framework replacement. It keeps Laravel simple, then layers modern UX progressively so every app can scale from MVP to production without rewriting the stack.

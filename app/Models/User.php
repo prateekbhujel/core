@@ -21,6 +21,15 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'role',
+        'permissions',
+        'telegram_chat_id',
+        'receive_in_app_notifications',
+        'receive_telegram_notifications',
+        'two_factor_enabled',
+        'two_factor_code',
+        'two_factor_expires_at',
+        'facebook_id',
     ];
 
     /**
@@ -43,6 +52,27 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'permissions' => 'array',
+            'receive_in_app_notifications' => 'boolean',
+            'receive_telegram_notifications' => 'boolean',
+            'two_factor_enabled' => 'boolean',
+            'two_factor_expires_at' => 'datetime',
         ];
+    }
+
+    public function isAdmin(): bool
+    {
+        return $this->role === 'admin';
+    }
+
+    public function hasRole(string $role): bool
+    {
+        return $this->role === $role;
+    }
+
+    public function canDo(string $permission): bool
+    {
+        $perms = $this->permissions ?? [];
+        return in_array($permission, $perms, true);
     }
 }

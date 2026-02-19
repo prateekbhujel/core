@@ -9,20 +9,25 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=JetBrains+Mono:wght@400;500&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css">
   <link rel="stylesheet" href="{{ asset('css/haarray.css') }}">
   <link rel="stylesheet" href="{{ asset('css/haarray.starter.css') }}">
+  <link rel="stylesheet" href="{{ asset('css/haarray.bootstrap-bridge.css') }}">
   @yield('styles')
 </head>
-<body>
+<body
+  data-notifications-feed-url="{{ route('notifications.feed') }}"
+  data-notification-read-url-template="{{ route('notifications.read', ['id' => '__ID__']) }}"
+>
 
 {{-- Sidebar overlay (mobile) --}}
 <div class="h-sidebar-overlay" id="h-sidebar-overlay"></div>
 
 {{-- Mobile toggle --}}
 <button class="h-menu-toggle" aria-label="Menu">
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-    <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
-  </svg>
+  <i class="fa-solid fa-bars"></i>
 </button>
 
 {{-- ═══ SIDEBAR ═══ --}}
@@ -39,69 +44,54 @@
 
   {{-- Nav --}}
   <div class="h-nav-sec">Finance</div>
-  <a href="{{ route('dashboard') }}" class="h-nav-item {{ request()->routeIs('dashboard') ? 'active' : '' }}">
-    <svg class="h-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-      <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
-      <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
-    </svg>
+  <a data-spa href="{{ route('dashboard') }}" class="h-nav-item {{ request()->routeIs('dashboard') ? 'active' : '' }}">
+    <i class="h-nav-icon fa-solid fa-gauge-high fa-fw"></i>
     Dashboard
   </a>
   <a href="#" class="h-nav-item" onclick="HToast.info('Coming soon!');return false;">
-    <svg class="h-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-      <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>
-    </svg>
+    <i class="h-nav-icon fa-solid fa-money-bill-transfer fa-fw"></i>
     Transactions
     <span class="h-nav-badge">Soon</span>
   </a>
-  <a data-spa href="{{ route('docs.starter') }}" class="h-nav-item">
-    <svg class="h-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-      <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>
-    </svg>
-    Docs
-    <span class="h-nav-badge">Soon</span>
-  </a>
   <a href="#" class="h-nav-item" onclick="HToast.info('Coming soon!');return false;">
-    <svg class="h-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-      <rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/>
-    </svg>
+    <i class="h-nav-icon fa-solid fa-building-columns fa-fw"></i>
     Accounts
   </a>
   <a href="#" class="h-nav-item" onclick="HToast.info('Coming soon!');return false;">
-    <svg class="h-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-      <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>
-    </svg>
+    <i class="h-nav-icon fa-solid fa-chart-line fa-fw"></i>
     Portfolio
   </a>
 
   <div class="h-nav-sec">Market</div>
   <a href="#" class="h-nav-item" onclick="HToast.info('Coming soon!');return false;">
-    <svg class="h-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-      <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-    </svg>
+    <i class="h-nav-icon fa-solid fa-clock fa-fw"></i>
     IPO Tracker
     <span class="h-nav-badge teal">3</span>
   </a>
   <a href="#" class="h-nav-item" onclick="HToast.info('Coming soon!');return false;">
-    <svg class="h-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-      <circle cx="12" cy="12" r="5"/>
-      <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
-    </svg>
+    <i class="h-nav-icon fa-solid fa-coins fa-fw"></i>
     Gold & Forex
   </a>
 
   <div class="h-nav-sec">Intelligence</div>
   <a href="#" class="h-nav-item" onclick="HToast.info('Coming soon!');return false;">
-    <svg class="h-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-      <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-    </svg>
+    <i class="h-nav-icon fa-solid fa-lightbulb fa-fw"></i>
     Suggestions
     <span class="h-nav-badge">2</span>
   </a>
   <a href="#" class="h-nav-item" onclick="HToast.info('Coming soon!');return false;">
-    <svg class="h-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-      <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
-    </svg>
+    <i class="h-nav-icon fa-brands fa-telegram fa-fw"></i>
     Telegram Bot
+  </a>
+
+  <div class="h-nav-sec">System</div>
+  <a data-spa href="{{ route('docs.index') }}" class="h-nav-item {{ request()->routeIs('docs.*') ? 'active' : '' }}">
+    <i class="h-nav-icon fa-solid fa-book-open fa-fw"></i>
+    Docs
+  </a>
+  <a data-spa href="{{ route('settings.index') }}" class="h-nav-item {{ request()->routeIs('settings.*') ? 'active' : '' }}">
+    <i class="h-nav-icon fa-solid fa-sliders fa-fw"></i>
+    Settings
   </a>
 
   <div class="h-sidebar-spacer"></div>
@@ -114,9 +104,7 @@
         <div class="h-user-name">{{ auth()->user()->name }}</div>
         <div class="h-user-role">HariLog Free</div>
       </div>
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--t3);flex-shrink:0;">
-        <circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/>
-      </svg>
+      <i class="fa-solid fa-ellipsis-vertical" style="color:var(--t3);flex-shrink:0;"></i>
     </div>
   </div>
 
@@ -127,10 +115,16 @@
 
   {{-- Topbar --}}
   <header class="h-topbar">
-    <span class="h-page-title-bar">@yield('page_title', 'Dashboard')</span>
+    <span class="h-page-title-bar" id="h-page-title">@yield('page_title', 'Dashboard')</span>
     <span id="h-clock" style="font-family:var(--fm);font-size:11px;color:var(--t3);"></span>
     <div class="h-topbar-right">
-      @yield('topbar_extra')
+      <div id="h-topbar-extra">
+        @yield('topbar_extra')
+      </div>
+      <button class="h-icon-btn h-notif-toggle" type="button" title="Notifications" data-notif-toggle aria-label="Notifications">
+        <i class="fa-solid fa-bell"></i>
+        <span class="h-notif-dot is-hidden"></span>
+      </button>
       {{-- Theme toggle --}}
       <button class="h-theme-toggle h-icon-btn" title="Toggle theme">
         <span class="moon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg></span>
@@ -158,10 +152,32 @@
   @endif
 
   {{-- Page content --}}
-  <div class="h-page">
+  <div class="h-page" id="h-spa-content">
     @yield('content')
   </div>
 
+</div>
+
+{{-- Notification Tray --}}
+<div class="h-notif-tray" id="h-notif-tray" aria-hidden="true">
+  <div class="h-notif-head">
+    <div>
+      <div class="h-notif-title">Notifications</div>
+      <div class="h-notif-sub">System alerts and updates</div>
+    </div>
+    <div class="h-row" style="gap:6px;">
+      <button type="button" class="h-icon-btn" data-notif-refresh aria-label="Refresh notifications" title="Refresh">
+        <i class="fa-solid fa-rotate"></i>
+      </button>
+      <button type="button" class="h-modal-close" data-notif-close aria-label="Close notifications">×</button>
+    </div>
+  </div>
+  <div class="h-notif-list" id="h-notif-list">
+    <div class="h-notif-empty">
+      <i class="fa-regular fa-bell-slash"></i>
+      <span>No notifications yet.</span>
+    </div>
+  </div>
 </div>
 
 {{-- ═══ GLOBAL MODALS ═══ --}}
@@ -196,6 +212,8 @@
 <x-confirm-modal />
 {{-- Scripts --}}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 <script src="{{ asset('js/haarray.js') }}"></script>
 <script src="{{ asset('js/haarray.plugins.js') }}"></script>
 @yield('scripts')

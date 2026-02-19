@@ -1,84 +1,367 @@
 @extends('layouts.haarray')
 
-@section('title','Starter Kit — Docs')
-@section('page_title','Starter Kit')
+@section('title', 'Starter Kit Docs')
+@section('page_title', 'Starter Kit')
+@section('topbar_extra')
+  <span class="h-live-badge">
+    <i class="fa-solid fa-book-open"></i>
+    Docs
+  </span>
+@endsection
 
 @section('content')
+@php
+  $currencies = [
+    'NPR' => 'Nepalese Rupee',
+    'USD' => 'US Dollar',
+    'EUR' => 'Euro',
+    'GBP' => 'Pound Sterling',
+    'JPY' => 'Japanese Yen',
+    'AUD' => 'Australian Dollar',
+    'CAD' => 'Canadian Dollar',
+    'INR' => 'Indian Rupee',
+    'SGD' => 'Singapore Dollar',
+    'CHF' => 'Swiss Franc',
+  ];
+  $leadAvatar = 'https://ui-avatars.com/api/?name=' . urlencode(auth()->user()->name) . '&background=f5a623&color=111111&size=64';
+@endphp
+
 <div class="hl-docs">
   <div class="doc-head">
     <div>
       <div class="doc-title">Haarray Starter Kit</div>
-      <div class="doc-sub">A compact, progressive-enhancement toolkit — confirm modal, editor, icons, and SVG charts.</div>
+      <div class="doc-sub">
+        Production-ready Laravel scaffold with custom icon pack, select component, rich text editor,
+        progressive SPA navigation, and reusable UI primitives.
+      </div>
     </div>
-    <div class="kv">v1.0 • Minimal JS • jQuery friendly</div>
+    <div class="h-stack" style="align-items:flex-end;">
+      <span class="h-pill gold">v0.1</span>
+      <span class="h-pill teal">Server-first + Progressive UI</span>
+    </div>
   </div>
 
-  <div class="doc-grid">
-    <aside class="doc-toc">
-      <strong>Contents</strong>
-      <ul style="margin-top:8px;">
-        <li><a href="#confirm">Confirm (HConfirm)</a></li>
-        <li><a href="#editor">Editor (HEditor)</a></li>
-        <li><a href="#icons">Icons</a></li>
-        <li><a href="#svgpies">SVG Pie charts</a></li>
-        <li><a href="#integration">Integration</a></li>
-      </ul>
-    </aside>
+  <div class="h-tab-shell h-doc-tabs" data-ui-tabs data-default-tab="docs-foundation">
+    <div class="h-tab-nav" role="tablist" aria-label="Starter docs sections">
+      <button type="button" class="h-tab-btn" data-tab-btn="docs-foundation">
+        <i class="fa-solid fa-compass"></i>
+        Foundation
+      </button>
+      <button type="button" class="h-tab-btn" data-tab-btn="docs-ui">
+        <i class="fa-solid fa-palette"></i>
+        UI Kit
+      </button>
+      <button type="button" class="h-tab-btn" data-tab-btn="docs-forms">
+        <i class="fa-solid fa-rectangle-list"></i>
+        Form Tools
+      </button>
+      <button type="button" class="h-tab-btn" data-tab-btn="docs-visuals">
+        <i class="fa-solid fa-chart-pie"></i>
+        Visuals
+      </button>
+    </div>
 
-    <main class="doc-content">
-      <section id="confirm">
-        <h3>Confirm (HConfirm)</h3>
-        <p>Make any destructive link or form show a confirmation modal while still allowing the action to work without JS.</p>
-
-        <h4>Simple link example</h4>
-        <pre><code>&lt;a href="{{ route('dashboard', 1) }}" data-confirm="true" data-confirm-title="Delete post?" data-confirm-text="This cannot be undone." data-confirm-method="DELETE"&gt;Delete&lt;/a&gt;</code></pre>
-
-        <h4>Form example</h4>
-        <pre><code>&lt;form action="/delete" method="POST" data-confirm="true"&gt;
-  &lt;input type="hidden" name="_token" value="..."&gt;
-  &lt;button type="submit"&gt;Delete&lt;/button&gt;
-&lt;/form&gt;</code></pre>
-
-        <h4>Data attributes</h4>
-        <ul>
-          <li><code>data-confirm-title</code> — modal title</li>
-          <li><code>data-confirm-text</code> — body text</li>
-          <li><code>data-confirm-ok</code> — ok button text</li>
-          <li><code>data-confirm-cancel</code> — cancel text</li>
-          <li><code>data-confirm-method</code> — for links: GET/POST/DELETE (default GET)</li>
-        </ul>
+    <div class="h-tab-panel" data-tab-panel="docs-foundation">
+      <section class="doc-block">
+        <h3>Overview</h3>
+        <p>
+          This starter keeps Laravel controllers and Blade views first, while adding modern frontend enhancements as optional layers.
+          If JavaScript fails, routes and forms still work with server rendering.
+        </p>
+        <div class="h-note" style="margin-top:10px;">
+          Key modules: <code>HSPA</code>, <code>HSelect</code>, <code>HEditor</code>, <code>HConfirm</code>, <code>HIcons</code>, <code>HSvgPie</code>.
+        </div>
       </section>
 
-      <section id="editor" style="margin-top:18px;">
-        <h3>Editor (HEditor)</h3>
-        <p>Use <code>data-editor</code> or <code>class="h-editor"</code>. If inside a form set a name via <code>data-editor-name</code>, which syncs to a hidden textarea on submit.</p>
-        <pre><code>&lt;div data-editor data-editor-name="notes"&gt;Initial content&lt;/div&gt;</code></pre>
-        <p>Toolbar: bold, italic, link. If you want bare editing (no toolbar): <code>data-editor="bare"</code>.</p>
+      <section class="doc-block">
+        <h3>SPA Lifecycle Hooks</h3>
+        <p>
+          For page-specific scripts after partial swap, listen to lifecycle events emitted by <code>HSPA</code>.
+        </p>
+
+        <pre><code>document.addEventListener('hspa:beforeLoad', (event) =&gt; {
+  console.log('Loading', event.detail.url);
+});
+
+document.addEventListener('hspa:afterSwap', (event) =&gt; {
+  console.log('Container swapped', event.detail.container);
+});</code></pre>
       </section>
 
-      <section id="icons" style="margin-top:18px;">
-        <h3>Icons</h3>
-        <p>Use sprite icons with <code>&lt;use&gt;</code>:</p>
-        <pre><code>&lt;svg class="h-icon"&gt;&lt;use xlink:href="/icons/icons.svg#trash"&gt;&lt;/use&gt;&lt;/svg&gt;</code></pre>
-      </section>
-
-      <section id="svgpies" style="margin-top:18px;">
-        <h3>SVG Pie charts</h3>
-        <p>Data is JSON inside <code>data-pie</code>. Example:</p>
-        <pre><code>&lt;div class="h-svg-pie" data-pie='[{ "label":"Food","value":30 },{ "label":"Rent","value":50 }] '&gt;&lt;/div&gt;</code></pre>
-        <p>Colors can be provided per slice: <code>{"label":"Food","value":30,"color":"#f5a623"}</code>.</p>
-      </section>
-
-      <section id="integration" style="margin-top:18px;">
-        <h3>Integration</h3>
+      <section class="doc-block">
+        <h3>Integration Checklist</h3>
         <ol>
-          <li>Include <code>public/css/haarray.starter.css</code> after your main CSS.</li>
-          <li>Include <code>public/js/haarray.plugins.js</code> after your main JS and after jQuery.</li>
-          <li>Include the sprite <code>public/icons/icons.svg</code> (inline or as external asset).</li>
-          <li>Include the confirm modal partial once: <code>@include('components.confirm-modal')</code>.</li>
+          <li>Load <code>bootstrap.css</code> and <code>font-awesome.css</code>, then <code>/public/css/haarray.css</code>, <code>/public/css/haarray.starter.css</code>, and <code>/public/css/haarray.bootstrap-bridge.css</code>.</li>
+          <li>Load jQuery, then <code>/public/js/haarray.js</code>, then <code>/public/js/haarray.plugins.js</code>.</li>
+          <li>For remote datasets, use <code>data-select2-remote</code> + <code>data-endpoint</code> on a native <code>&lt;select&gt;</code>.</li>
+          <li>Keep page content inside <code>#h-spa-content</code> for partial navigation.</li>
+          <li>Include <code>&lt;x-confirm-modal /&gt;</code> once in the layout.</li>
+          <li>Add sidebar links for <code>Docs</code> and <code>Settings</code> routes so team members can navigate core references and env UI quickly.</li>
+          <li>Use Blade components (<code>&lt;x-icon&gt;</code>, <code>&lt;x-select&gt;</code>, <code>&lt;x-editor&gt;</code>) for consistent scaffolding.</li>
         </ol>
       </section>
-    </main>
+    </div>
+
+    <div class="h-tab-panel" data-tab-panel="docs-ui">
+      <section class="doc-block">
+        <h3>Icon System</h3>
+        <p>
+          Use either Haarray SVG icons or Font Awesome class-based icons (<code>&lt;i class=&quot;...&quot;&gt;</code>) for faster domain UIs
+          like CRM, lead management, social channels, etc.
+        </p>
+
+        <pre><code>&lt;x-icon name="dashboard" class="h-icon h-icon--lg" label="Dashboard" /&gt;
+&lt;span data-icon="wallet" data-icon-size="20" class="h-icon"&gt;&lt;/span&gt;
+&lt;i class="fa-brands fa-facebook-f"&gt;&lt;/i&gt;</code></pre>
+
+        <div class="demo">
+          <div class="h-row" style="flex-wrap:wrap;">
+            <x-icon name="dashboard" class="h-icon h-icon--lg" label="Dashboard" />
+            <x-icon name="wallet" class="h-icon h-icon--lg" label="Wallet" />
+            <x-icon name="chart-line" class="h-icon h-icon--lg" label="Chart" />
+            <x-icon name="sparkles" class="h-icon h-icon--lg" label="Sparkles" />
+            <x-icon name="settings" class="h-icon h-icon--lg" label="Settings" />
+            <span data-icon="message" data-icon-size="20" class="h-icon"></span>
+            <i class="fa-brands fa-facebook-f"></i>
+            <i class="fa-brands fa-instagram"></i>
+            <i class="fa-brands fa-linkedin-in"></i>
+          </div>
+        </div>
+      </section>
+
+      <section class="doc-block">
+        <h3>Bootstrap + Font Awesome</h3>
+        <p>
+          Bootstrap and Font Awesome are bundled globally. Use those classes directly and Haarray theme variables
+          will skin them through <code>haarray.bootstrap-bridge.css</code>.
+        </p>
+
+        <pre><code>&lt;button class="btn btn-primary"&gt;
+  &lt;i class="fa-solid fa-floppy-disk me-2"&gt;&lt;/i&gt;Save
+&lt;/button&gt;</code></pre>
+
+        <div class="demo">
+          <div class="card p-3">
+            <h5 class="mb-3">
+              <i class="fa-solid fa-bolt text-warning me-2"></i>
+              Bootstrap + Haarray theme
+            </h5>
+            <div class="d-flex gap-2 flex-wrap">
+              <button class="btn btn-primary"><i class="fa-solid fa-check me-2"></i>Primary</button>
+              <button class="btn btn-outline-secondary"><i class="fa-solid fa-xmark me-2"></i>Secondary</button>
+              <button class="btn btn-success"><i class="fa-solid fa-circle-check me-2"></i>Success</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="doc-block">
+        <h3>Class Reference</h3>
+        <p>Use these classes directly across pages. The list below covers both Haarray and Bootstrap utility usage.</p>
+
+        <div class="table-responsive mt-2">
+          <table class="table table-sm align-middle">
+            <thead>
+              <tr>
+                <th>Class</th>
+                <th>Type</th>
+                <th>Purpose</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>.h-btn</code></td>
+                <td>Haarray</td>
+                <td>Primary button system with variants like <code>.primary</code>, <code>.ghost</code>, <code>.danger</code>.</td>
+              </tr>
+              <tr>
+                <td><code>.h-card</code> / <code>.h-card-soft</code></td>
+                <td>Haarray</td>
+                <td>Reusable card surfaces for app panels and docs blocks.</td>
+              </tr>
+              <tr>
+                <td><code>.h-select2-wrap</code></td>
+                <td>Haarray</td>
+                <td>Auto-generated wrapper for custom select component.</td>
+              </tr>
+              <tr>
+                <td><code>.h-editor</code></td>
+                <td>Haarray</td>
+                <td>Rich editor area; supports toolbar and hidden textarea sync.</td>
+              </tr>
+              <tr>
+                <td><code>.btn</code>, <code>.btn-primary</code></td>
+                <td>Bootstrap</td>
+                <td>Bootstrap buttons skinned to Haarray color tokens.</td>
+              </tr>
+              <tr>
+                <td><code>.form-control</code>, <code>.form-select</code></td>
+                <td>Bootstrap</td>
+                <td>Inputs/selects with Bootstrap API but Haarray theme appearance.</td>
+              </tr>
+              <tr>
+                <td><code>.row</code>, <code>.col-md-6</code>, <code>.g-3</code></td>
+                <td>Bootstrap</td>
+                <td>Grid layout utilities for responsive forms and panels.</td>
+              </tr>
+              <tr>
+                <td><code>.fa-solid</code> + icon name</td>
+                <td>Font Awesome</td>
+                <td>Open-source icon classes for utility and action icons.</td>
+              </tr>
+              <tr>
+                <td><code>select[data-select2-remote]</code></td>
+                <td>Select2</td>
+                <td>Remote server search with avatar/image rendering in results.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <div class="h-tab-panel" data-tab-panel="docs-forms">
+      <section class="doc-block">
+        <h3>Remote Select2 (Server + Image)</h3>
+        <p>
+          For large datasets (leads, users, products), use Select2 AJAX mode. Results are fetched from server and support avatars/images.
+          This starter ships a demo endpoint: <code>{{ route('ui.options.leads') }}</code>.
+        </p>
+
+        <pre><code>&lt;select
+  data-select2-remote
+  data-endpoint="{{ route('ui.options.leads') }}"
+  data-placeholder="Search leads..."
+  data-min-input="1"&gt;
+  &lt;option value="{{ auth()->id() }}" selected data-image="{{ $leadAvatar }}"&gt;{{ auth()->user()->name }}&lt;/option&gt;
+&lt;/select&gt;</code></pre>
+
+        <div class="demo">
+          <label class="h-label" style="display:block;margin-bottom:8px;">Assign Lead Owner</label>
+          <select
+            class="form-select"
+            data-select2-remote
+            data-endpoint="{{ route('ui.options.leads') }}"
+            data-placeholder="Search leads..."
+            data-min-input="1"
+          >
+            <option value="{{ auth()->id() }}" selected data-image="{{ $leadAvatar }}">{{ auth()->user()->name }}</option>
+          </select>
+        </div>
+      </section>
+
+      <section class="doc-block">
+        <h3>Custom Select (HSelect)</h3>
+        <p>
+          <code>HSelect</code> provides searchable single/multi select UI while preserving native <code>&lt;select&gt;</code> submission for forms.
+        </p>
+
+        <pre><code>&lt;x-select
+  name="currency"
+  label="Primary Currency"
+  :options="$currencies"
+  placeholder="Choose currency"
+/&gt;</code></pre>
+
+        <div class="demo">
+          <form>
+            <div class="h-grid cols-2">
+              <x-select
+                name="currency"
+                label="Primary Currency"
+                :options="$currencies"
+                value="NPR"
+                placeholder="Choose currency"
+              />
+
+              <x-select
+                name="watchlist"
+                label="Watchlist"
+                :options="$currencies"
+                :value="['USD','EUR','INR']"
+                :multiple="true"
+                placeholder="Select currencies"
+              />
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <section class="doc-block">
+        <h3>Rich Editor (HEditor)</h3>
+        <p>
+          Use <code>&lt;x-editor&gt;</code> for a lightweight CKEditor-style block with toolbar and automatic hidden-field syncing.
+          Works inside normal Laravel forms.
+        </p>
+
+        <pre><code>&lt;x-editor
+  name="announcement"
+  label="Announcement"
+  value="&lt;p&gt;Welcome to Haarray Core&lt;/p&gt;"
+  placeholder="Write update..."
+/&gt;</code></pre>
+
+        <div class="demo">
+          <x-editor
+            name="announcement_demo"
+            label="Announcement"
+            value="<p><strong>Starter tip:</strong> keep controllers server-first and layer JS progressively.</p>"
+            placeholder="Write update..."
+          />
+        </div>
+      </section>
+
+      <section class="doc-block">
+        <h3>Confirm Modal</h3>
+        <p>
+          Add <code>data-confirm="true"</code> to forms or links that require confirmation.
+          For links, you can pass HTTP method via <code>data-confirm-method</code>.
+        </p>
+
+        <pre><code>&lt;a href="/posts/1"
+   data-confirm="true"
+   data-confirm-method="DELETE"
+   data-confirm-title="Delete this post?"
+   data-confirm-text="This action cannot be undone."&gt;
+   Delete
+&lt;/a&gt;</code></pre>
+
+        <div class="demo h-row" style="justify-content:flex-start;">
+          <a
+            href="{{ route('dashboard') }}"
+            class="h-btn danger"
+            data-confirm="true"
+            data-confirm-title="Leave docs page?"
+            data-confirm-text="You will return to dashboard."
+            data-confirm-ok="Go"
+          >
+            <x-icon name="arrow-right" class="h-icon" />
+            Demo Confirm Link
+          </a>
+        </div>
+      </section>
+    </div>
+
+    <div class="h-tab-panel" data-tab-panel="docs-visuals">
+      <section class="doc-block">
+        <h3>SVG Pie Charts</h3>
+        <p>
+          Render tiny analytics blocks without chart libraries.
+          Set <code>data-pie</code> with JSON payload.
+        </p>
+
+        <pre><code>&lt;div class="h-svg-pie"
+  data-pie='[{"label":"Savings","value":45},{"label":"Expense","value":35},{"label":"Investments","value":20}]'&gt;
+&lt;/div&gt;</code></pre>
+
+        <div class="demo">
+          <div
+            class="h-svg-pie"
+            data-pie='[{"label":"Savings","value":45,"color":"#34d399"},{"label":"Expense","value":35,"color":"#f5a623"},{"label":"Investments","value":20,"color":"#60a5fa"}]'
+          ></div>
+        </div>
+      </section>
+    </div>
   </div>
 </div>
 @endsection
