@@ -2167,6 +2167,7 @@
     selector: '[data-editor], .h-editor',
     dialogId: 'h-editor-tool-modal',
     _dialogReady: false,
+    _activeDialogCleanup: null,
     toolbarGroups: [
       [
         {
@@ -2206,6 +2207,7 @@
         { cmd: 'unlink', label: '<i class="fa-solid fa-link-slash"></i>', title: 'Remove link' },
         { cmd: 'insertImage', label: '<i class="fa-solid fa-image"></i>', title: 'Insert image URL' },
         { cmd: 'insertTable', label: '<i class="fa-solid fa-table"></i>', title: 'Insert table' },
+        { cmd: 'insertCanvas', label: '<i class="fa-solid fa-vector-square"></i>', title: 'Insert canvas block' },
         { cmd: 'insertHorizontalRule', label: '<i class="fa-solid fa-grip-lines"></i>', title: 'Horizontal line' },
       ],
       [
@@ -2241,6 +2243,7 @@
       if (!isBare) this._insertToolbar(el);
       this._bindEditorEvents(el, editorName);
       this._syncHiddenField(el, editorName);
+      this._decorateCanvases(el);
     },
 
     _insertToolbar(editorEl) {
@@ -2402,6 +2405,26 @@
           this._finalize(editorEl);
         });
         return;
+      } else if (cmd === 'insertCanvas') {
+        const savedRange = this._saveSelection(editorEl);
+        this._openToolModal('canvas').then((payload) => {
+          if (!payload) return;
+          const width = Number(payload.width || 640);
+          const height = Number(payload.height || 280);
+          const safeWidth = Number.isFinite(width) ? Math.max(160, Math.min(1440, Math.floor(width))) : 640;
+          const safeHeight = Number.isFinite(height) ? Math.max(120, Math.min(900, Math.floor(height))) : 280;
+          const bg = String(payload.background || '#0f172a').trim();
+          const isSafeHex = /^#[0-9a-fA-F]{6}$/.test(bg);
+
+          editorEl.focus();
+          this._restoreSelection(editorEl, savedRange);
+          this._insertHtml(
+            editorEl,
+            `<canvas width="${safeWidth}" height="${safeHeight}" data-bg="${this._escapeAttribute(isSafeHex ? bg : '#0f172a')}"></canvas><p><br></p>`
+          );
+          this._finalize(editorEl);
+        });
+        return;
       } else if (cmd === 'inlineCode') {
         this._toggleInlineCode(editorEl);
       } else if (cmd === 'formatBlock') {
@@ -2415,6 +2438,7 @@
 
     _finalize(editorEl) {
       this._sanitize(editorEl);
+      this._decorateCanvases(editorEl);
       editorEl.dispatchEvent(new Event('input', { bubbles: true }));
       this._syncHiddenField(editorEl, editorEl.dataset.editorName || editorEl.getAttribute('name') || '');
       this._refreshToolbarState(editorEl);
@@ -2446,7 +2470,7 @@
         'B', 'STRONG', 'I', 'EM', 'U', 'S', 'STRIKE',
         'A', 'UL', 'OL', 'LI', 'BLOCKQUOTE', 'PRE', 'CODE',
         'HR', 'TABLE', 'THEAD', 'TBODY', 'TR', 'TH', 'TD',
-        'IMG', 'SPAN',
+        'IMG', 'SPAN', 'CANVAS',
       ]);
 
       root.querySelectorAll('script,style,iframe,object,embed,form,input,button,textarea,select').forEach((node) => node.remove());
@@ -2498,11 +2522,37 @@
             return;
           }
 
+          if (node.tagName === 'CANVAS') {
+            if (['width', 'height', 'data-bg'].includes(name)) {
+              return;
+            }
+
+            node.removeAttribute(attr.name);
+            return;
+          }
+
           node.removeAttribute(attr.name);
         });
       });
 
       editorEl.innerHTML = root.innerHTML;
+    },
+
+    _decorateCanvases(editorEl) {
+      if (!editorEl) return;
+      editorEl.querySelectorAll('canvas').forEach((canvas) => {
+        const bg = String(canvas.getAttribute('data-bg') || '').trim();
+        if (/^#[0-9a-fA-F]{6}$/.test(bg)) {
+          canvas.style.backgroundColor = bg;
+        } else {
+          canvas.style.backgroundColor = '#0f172a';
+        }
+        canvas.style.display = 'block';
+        canvas.style.maxWidth = '100%';
+        canvas.style.width = '100%';
+        canvas.style.border = '1px dashed rgba(148, 163, 184, 0.45)';
+        canvas.style.borderRadius = '8px';
+      });
     },
 
     _refreshToolbarState(editorEl) {
@@ -2626,16 +2676,6 @@
         document.body.appendChild(modal);
       }
 
-      modal.addEventListener('click', (event) => {
-        if (event.target === modal || event.target.closest('[data-editor-modal-close]')) {
-          if (window.HModal) {
-            window.HModal.close(this.dialogId);
-          } else {
-            modal.classList.remove('show');
-          }
-        }
-      });
-
       this._dialogReady = true;
     },
 
@@ -2715,6 +2755,26 @@
             </div>
           `,
         },
+        canvas: {
+          title: 'Insert Canvas',
+          html: `
+            <div class="h-editor-modal-grid">
+              <div>
+                <label class="h-label" style="display:block;">Width</label>
+                <input type="number" class="form-control" name="width" min="160" max="1440" value="640" required>
+              </div>
+              <div>
+                <label class="h-label" style="display:block;">Height</label>
+                <input type="number" class="form-control" name="height" min="120" max="900" value="280" required>
+              </div>
+              <div>
+                <label class="h-label" style="display:block;">Background (hex)</label>
+                <input type="text" class="form-control" name="background" value="#0f172a" pattern="^#[0-9a-fA-F]{6}$">
+              </div>
+            </div>
+            <div class="h-note" style="margin-top:10px;">Canvas blocks are stored as editable HTML canvas nodes.</div>
+          `,
+        },
       }[type];
 
       if (!config) return Promise.resolve(null);
@@ -2739,7 +2799,19 @@
       }
 
       return new Promise((resolve) => {
+        if (typeof this._activeDialogCleanup === 'function') {
+          this._activeDialogCleanup();
+          this._activeDialogCleanup = null;
+        }
+
+        let finished = false;
         const finish = (payload) => {
+          if (finished) return;
+          finished = true;
+          if (typeof this._activeDialogCleanup === 'function') {
+            this._activeDialogCleanup();
+            this._activeDialogCleanup = null;
+          }
           if (window.HModal) {
             window.HModal.close(this.dialogId);
           } else {
@@ -2748,7 +2820,7 @@
           resolve(payload);
         };
 
-        formEl.addEventListener('submit', (event) => {
+        const submitHandler = (event) => {
           event.preventDefault();
           const formData = new FormData(formEl);
           const payload = {};
@@ -2756,11 +2828,36 @@
             payload[key] = String(value || '').trim();
           });
           finish(payload);
-        }, { once: true });
+        };
 
-        modal.querySelectorAll('[data-editor-modal-close]').forEach((button) => {
-          button.addEventListener('click', () => finish(null), { once: true });
-        });
+        const closeHandlers = [];
+        const registerClose = (button) => {
+          const handler = () => finish(null);
+          button.addEventListener('click', handler);
+          closeHandlers.push([button, handler]);
+        };
+
+        const escapeHandler = (event) => {
+          if (event.key !== 'Escape') return;
+          finish(null);
+        };
+        const overlayHandler = (event) => {
+          if (event.target === modal) finish(null);
+        };
+
+        formEl.addEventListener('submit', submitHandler);
+        modal.querySelectorAll('[data-editor-modal-close]').forEach((button) => registerClose(button));
+        document.addEventListener('keydown', escapeHandler);
+        modal.addEventListener('click', overlayHandler);
+
+        this._activeDialogCleanup = () => {
+          formEl.removeEventListener('submit', submitHandler);
+          document.removeEventListener('keydown', escapeHandler);
+          modal.removeEventListener('click', overlayHandler);
+          closeHandlers.forEach(([button, handler]) => {
+            button.removeEventListener('click', handler);
+          });
+        };
       });
     },
 

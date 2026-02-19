@@ -5,7 +5,7 @@
     $uiBranding = \App\Support\AppSettings::uiBranding();
     $brandDisplayName = trim((string) ($uiBranding['display_name'] ?? config('app.name', 'HariLog')));
     $brandMark = trim((string) ($uiBranding['brand_mark'] ?? config('haarray.app_initial', 'H')));
-    $brandFavicon = trim((string) ($uiBranding['favicon_url'] ?? ''));
+    $brandFavicon = \App\Support\AppSettings::resolveUiAsset((string) ($uiBranding['favicon_url'] ?? ''));
     if ($brandDisplayName === '') {
       $brandDisplayName = (string) config('app.name', 'HariLog');
     }

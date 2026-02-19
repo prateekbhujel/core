@@ -92,7 +92,20 @@ class UiOptionsController extends Controller
                     return '<span class="h-muted">View only</span>';
                 }
 
-                return '<button type="button" class="btn btn-outline-secondary btn-sm" data-user-edit-id="' . (int) $user->id . '">Edit</button>';
+                $editButton = '<button type="button" class="btn btn-outline-secondary btn-sm" data-user-edit-id="' . (int) $user->id . '">Edit</button>';
+                if ((int) $request->user()->id === (int) $user->id) {
+                    return $editButton;
+                }
+
+                $deleteAction = route('settings.users.delete', $user);
+                $csrf = csrf_token();
+                $deleteForm = '<form method="POST" action="' . e($deleteAction) . '" class="d-inline-block ms-1" data-spa data-confirm="true" data-confirm-title="Delete user?" data-confirm-text="This user account will be removed permanently.">'
+                    . '<input type="hidden" name="_token" value="' . e($csrf) . '">'
+                    . '<input type="hidden" name="_method" value="DELETE">'
+                    . '<button type="submit" class="btn btn-outline-danger btn-sm">Delete</button>'
+                    . '</form>';
+
+                return $editButton . $deleteForm;
             })
             ->rawColumns(['actions'])
             ->toJson();

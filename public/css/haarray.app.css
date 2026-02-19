@@ -1766,6 +1766,10 @@ input,select,textarea { font-family:var(--fb); }
   margin-bottom: 12px;
 }
 
+.hl-settings .h-settings-shell--sidebar-nav > .h-tab-nav {
+  display: none;
+}
+
 .hl-settings .h-settings-shell > .h-tab-panel {
   border: 1px solid var(--hl-border-strong);
   border-radius: 14px;
@@ -1963,6 +1967,30 @@ input,select,textarea { font-family:var(--fb); }
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
   gap: 12px;
+}
+
+.hl-settings .h-user-channel-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.hl-settings .h-user-access-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.hl-settings .h-user-access-item {
+  border: 1px solid var(--hl-border);
+  border-radius: 10px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.01);
+  display: grid;
+  gap: 8px;
+}
+
+.hl-settings .h-user-access-copy code {
+  font-size: 10px;
 }
 
 .hl-settings .h-switch-wrap {

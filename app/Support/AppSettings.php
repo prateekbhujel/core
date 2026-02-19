@@ -84,6 +84,35 @@ class AppSettings
         ];
     }
 
+    public static function resolveUiAsset(?string $value): string
+    {
+        $raw = trim((string) ($value ?? ''));
+        if ($raw === '') {
+            return '';
+        }
+
+        if (preg_match('/^(https?:)?\/\//i', $raw) || str_starts_with($raw, 'data:')) {
+            $parsedPath = (string) (parse_url($raw, PHP_URL_PATH) ?? '');
+            if ($parsedPath !== '' && str_contains($parsedPath, '/uploads/')) {
+                $relative = ltrim($parsedPath, '/');
+                if (!is_file(public_path($relative))) {
+                    return '';
+                }
+
+                return url($relative);
+            }
+
+            return $raw;
+        }
+
+        $relative = ltrim($raw, '/');
+        if (str_starts_with($relative, 'uploads/') && !is_file(public_path($relative))) {
+            return '';
+        }
+
+        return url($relative);
+    }
+
     private static function tableReady(): bool
     {
         try {

@@ -81,6 +81,7 @@ class SettingsController extends Controller
         $roles = $this->availableRoleNames();
         $permissions = $this->availablePermissionNames();
         $canManageUsers = (bool) ($viewer && $viewer->can('manage users'));
+        $accessModules = $this->accessModules();
 
         $query = User::query()->orderBy('name');
         if ($permissionTablesReady) {
@@ -88,17 +89,47 @@ class SettingsController extends Controller
         }
         $users = $query->get();
 
-        $selectedUserId = (int) $request->query('user', 0);
-        $selectedUser = $users->firstWhere('id', $selectedUserId);
-        if (!$selectedUser instanceof User) {
-            $selectedUser = $users->first();
+        $userPayload = [];
+        foreach ($users as $managedUser) {
+            $currentRole = $permissionTablesReady
+                ? ($managedUser->roles->first()->name ?? $managedUser->role ?? 'user')
+                : ($managedUser->role ?? 'user');
+
+            $directPermissions = $permissionTablesReady
+                ? $managedUser->permissions->pluck('name')->values()->all()
+                : [];
+
+            $moduleAccess = [];
+            foreach ($accessModules as $moduleKey => $module) {
+                if (in_array($module['manage_permission'], $directPermissions, true)) {
+                    $moduleAccess[$moduleKey] = 'manage';
+                } elseif (in_array($module['view_permission'], $directPermissions, true)) {
+                    $moduleAccess[$moduleKey] = 'view';
+                } else {
+                    $moduleAccess[$moduleKey] = 'none';
+                }
+            }
+
+            $userPayload[$managedUser->id] = [
+                'id' => $managedUser->id,
+                'name' => (string) $managedUser->name,
+                'email' => (string) $managedUser->email,
+                'role' => (string) $currentRole,
+                'telegram_chat_id' => (string) ($managedUser->telegram_chat_id ?? ''),
+                'receive_in_app_notifications' => (bool) $managedUser->receive_in_app_notifications,
+                'receive_telegram_notifications' => (bool) $managedUser->receive_telegram_notifications,
+                'browser_notifications_enabled' => (bool) $managedUser->browser_notifications_enabled,
+                'permissions' => $directPermissions,
+                'module_access' => $moduleAccess,
+            ];
         }
 
         return view('settings.users', [
             'users' => $users,
-            'selectedUser' => $selectedUser,
             'roles' => $roles,
             'permissionOptions' => $permissions,
+            'accessModules' => $accessModules,
+            'userPayload' => $userPayload,
             'hasSpatiePermissions' => $permissionTablesReady,
             'canManageUsers' => $canManageUsers,
         ]);
@@ -477,6 +508,48 @@ class SettingsController extends Controller
         return back()->with('success', 'Branding and asset settings updated successfully.');
     }
 
+    public function deleteBrandAsset(Request $request): RedirectResponse
+    {
+        $this->assertCan($request, 'manage settings', 'Only authorized admins can remove branding assets.');
+
+        $validated = $request->validate([
+            'asset_path' => ['required', 'string', 'max:255'],
+        ]);
+
+        $relativePath = ltrim(str_replace('\\', '/', (string) $validated['asset_path']), '/');
+        if (!str_starts_with($relativePath, 'uploads/branding/')) {
+            return back()->with('error', 'Invalid branding asset path.');
+        }
+
+        $absolutePath = public_path($relativePath);
+        $realPublic = realpath(public_path()) ?: public_path();
+        $realFile = realpath($absolutePath);
+
+        if ($realFile !== false && str_starts_with($realFile, $realPublic) && File::exists($realFile)) {
+            File::delete($realFile);
+        } elseif (File::exists($absolutePath)) {
+            File::delete($absolutePath);
+        }
+
+        $branding = AppSettings::uiBranding();
+        $updates = [];
+        if (ltrim((string) ($branding['logo_url'] ?? ''), '/') === $relativePath) {
+            $updates['ui.logo_url'] = '';
+        }
+        if (ltrim((string) ($branding['favicon_url'] ?? ''), '/') === $relativePath) {
+            $updates['ui.favicon_url'] = '';
+        }
+        if (ltrim((string) ($branding['app_icon_url'] ?? ''), '/') === $relativePath) {
+            $updates['ui.app_icon_url'] = '';
+        }
+
+        if (!empty($updates)) {
+            AppSettings::putMany($updates);
+        }
+
+        return back()->with('success', 'Branding media removed successfully.');
+    }
+
     public function updateUserAccess(Request $request, User $user): RedirectResponse
     {
         $this->assertCan($request, 'manage users', 'Only users with access-management rights can update user permissions.');
@@ -513,11 +586,14 @@ class SettingsController extends Controller
             'telegram_chat_id' => ['nullable', 'string', 'max:255'],
             'permissions' => ['nullable', 'array'],
             'permissions.*' => $permissionItemRules,
+            'module_access' => ['nullable', 'array'],
+            'module_access.*' => ['nullable', 'string', Rule::in(['none', 'view', 'manage'])],
         ]);
 
+        $modulePermissions = $this->moduleAccessPermissions((array) ($validated['module_access'] ?? []));
         $directPermissions = array_values(array_filter(array_map(
             fn ($permission) => trim((string) $permission),
-            $validated['permissions'] ?? []
+            array_merge($validated['permissions'] ?? [], $modulePermissions)
         )));
 
         $roleName = $validated['role'];
@@ -730,6 +806,8 @@ class SettingsController extends Controller
             'browser_notifications_enabled' => ['nullable', 'boolean'],
             'permissions' => ['nullable', 'array'],
             'permissions.*' => ['string', Rule::in($availablePermissions)],
+            'module_access' => ['nullable', 'array'],
+            'module_access.*' => ['nullable', 'string', Rule::in(['none', 'view', 'manage'])],
         ]);
 
         $user = User::create([
@@ -745,7 +823,8 @@ class SettingsController extends Controller
 
         if ($this->permissionTablesReady()) {
             $user->syncRoles([(string) $validated['role']]);
-            $permissions = $this->normalizedPermissions($validated['permissions'] ?? [], $availablePermissions);
+            $modulePermissions = $this->moduleAccessPermissions((array) ($validated['module_access'] ?? []));
+            $permissions = $this->normalizedPermissions(array_merge($validated['permissions'] ?? [], $modulePermissions), $availablePermissions);
             $user->syncPermissions($permissions);
             app(PermissionRegistrar::class)->forgetCachedPermissions();
         }
@@ -770,6 +849,8 @@ class SettingsController extends Controller
             'browser_notifications_enabled' => ['nullable', 'boolean'],
             'permissions' => ['nullable', 'array'],
             'permissions.*' => ['string', Rule::in($availablePermissions)],
+            'module_access' => ['nullable', 'array'],
+            'module_access.*' => ['nullable', 'string', Rule::in(['none', 'view', 'manage'])],
         ]);
 
         $payload = [
@@ -790,7 +871,8 @@ class SettingsController extends Controller
 
         if ($this->permissionTablesReady()) {
             $user->syncRoles([(string) $validated['role']]);
-            $permissions = $this->normalizedPermissions($validated['permissions'] ?? [], $availablePermissions);
+            $modulePermissions = $this->moduleAccessPermissions((array) ($validated['module_access'] ?? []));
+            $permissions = $this->normalizedPermissions(array_merge($validated['permissions'] ?? [], $modulePermissions), $availablePermissions);
             $user->syncPermissions($permissions);
             app(PermissionRegistrar::class)->forgetCachedPermissions();
         }
@@ -1534,6 +1616,33 @@ class SettingsController extends Controller
             fn ($permission) => trim((string) $permission),
             $selected
         ), fn (string $permission) => $permission !== '' && isset($allowedSet[$permission])));
+    }
+
+    /**
+     * @param array<string, mixed> $moduleAccess
+     * @return array<int, string>
+     */
+    private function moduleAccessPermissions(array $moduleAccess): array
+    {
+        $modules = $this->accessModules();
+        $permissions = [];
+
+        foreach ($modules as $moduleKey => $module) {
+            $level = strtolower(trim((string) ($moduleAccess[$moduleKey] ?? 'none')));
+            if (!in_array($level, ['none', 'view', 'manage'], true)) {
+                $level = 'none';
+            }
+
+            if ($level === 'view' || $level === 'manage') {
+                $permissions[] = (string) $module['view_permission'];
+            }
+
+            if ($level === 'manage') {
+                $permissions[] = (string) $module['manage_permission'];
+            }
+        }
+
+        return array_values(array_unique($permissions));
     }
 
     /**

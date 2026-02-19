@@ -156,7 +156,7 @@
                       <td>{{ strtoupper($roleName) }}</td>
                       <td>{{ (int) $roleRow['users_count'] }}</td>
                       <td>
-                        <form method="POST" action="{{ route('settings.roles.delete', $roleRow['id']) }}" data-spa>
+                        <form method="POST" action="{{ route('settings.roles.delete', $roleRow['id']) }}" data-spa data-confirm="true" data-confirm-title="Delete role?" data-confirm-text="Role will be removed permanently if no user is assigned.">
                           @csrf
                           @method('DELETE')
                           <button type="submit" class="btn btn-outline-danger btn-sm" @disabled($isProtected || ((int) $roleRow['users_count']) > 0)>

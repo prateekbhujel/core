@@ -4,27 +4,9 @@
 <head>
   @php
     $uiBranding = \App\Support\AppSettings::uiBranding();
-    $resolveUiAsset = static function (?string $value): string {
-      $raw = trim((string) ($value ?? ''));
-      if ($raw === '') {
-        return '';
-      }
-
-      if (preg_match('/^(https?:)?\\/\\//i', $raw) || str_starts_with($raw, 'data:')) {
-        $parsed = parse_url($raw);
-        $path = (string) ($parsed['path'] ?? '');
-        if ($path !== '' && str_contains($path, '/uploads/')) {
-          return url(ltrim($path, '/'));
-        }
-
-        return $raw;
-      }
-
-      return url(ltrim($raw, '/'));
-    };
-    $brandFavicon = $resolveUiAsset((string) ($uiBranding['favicon_url'] ?? ''));
-    $brandLogo = $resolveUiAsset((string) ($uiBranding['logo_url'] ?? ''));
-    $brandAppIcon = $resolveUiAsset((string) ($uiBranding['app_icon_url'] ?? ''));
+    $brandFavicon = \App\Support\AppSettings::resolveUiAsset((string) ($uiBranding['favicon_url'] ?? ''));
+    $brandLogo = \App\Support\AppSettings::resolveUiAsset((string) ($uiBranding['logo_url'] ?? ''));
+    $brandAppIcon = \App\Support\AppSettings::resolveUiAsset((string) ($uiBranding['app_icon_url'] ?? ''));
     $themeColor = trim((string) ($uiBranding['theme_color'] ?? '#2f7df6'));
     if (!preg_match('/^#[0-9a-fA-F]{6}$/', $themeColor)) {
       $themeColor = '#2f7df6';

@@ -53,6 +53,10 @@ Route::middleware('auth')->group(function () {
         ->middleware('permission:manage settings')
         ->name('settings.branding');
 
+    Route::delete('/settings/branding/media', [SettingsController::class, 'deleteBrandAsset'])
+        ->middleware('permission:manage settings')
+        ->name('settings.branding.media.delete');
+
     Route::post('/settings/security', [SettingsController::class, 'updateMySecurity'])
         ->middleware('permission:view settings')
         ->name('settings.security');
@@ -62,7 +66,7 @@ Route::middleware('auth')->group(function () {
         ->name('settings.users.access');
 
     Route::get('/settings/users/{user}/access', function ($user) {
-        return redirect()->route('settings.users.index', ['user' => $user]);
+        return redirect()->route('settings.users.index', ['edit_user' => (string) $user]);
     })
         ->middleware('permission:view users');
 

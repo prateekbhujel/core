@@ -32,7 +32,7 @@
     <span class="h-pill teal">DB: {{ $dbLabel }}</span>
   </div>
 
-  <div class="h-tab-shell h-settings-shell" id="settings-main-tabs" data-ui-tabs data-default-tab="{{ $defaultSettingsTab }}">
+  <div class="h-tab-shell h-settings-shell h-settings-shell--sidebar-nav" id="settings-main-tabs" data-ui-tabs data-default-tab="{{ $defaultSettingsTab }}">
     <div class="h-tab-nav" role="tablist" aria-label="Settings sections">
       <button type="button" class="h-tab-btn" data-tab-btn="settings-app"><i class="fa-solid fa-palette"></i> App & Branding</button>
       <button type="button" class="h-tab-btn" data-tab-btn="settings-activity"><i class="fa-solid fa-chart-line"></i> Activity</button>
@@ -146,6 +146,14 @@
                       <button type="button" class="btn btn-outline-secondary btn-sm" data-media-pick data-media-target="ui-logo-url" data-media-url="{{ $asset['url'] }}">Logo</button>
                       <button type="button" class="btn btn-outline-secondary btn-sm" data-media-pick data-media-target="ui-favicon-url" data-media-url="{{ $asset['url'] }}">Favicon</button>
                       <button type="button" class="btn btn-outline-secondary btn-sm" data-media-pick data-media-target="ui-app-icon-url" data-media-url="{{ $asset['url'] }}">App Icon</button>
+                      <form method="POST" action="{{ route('settings.branding.media.delete') }}" data-spa data-confirm="true" data-confirm-title="Delete media?" data-confirm-text="This media file will be removed permanently.">
+                        @csrf
+                        @method('DELETE')
+                        <input type="hidden" name="asset_path" value="{{ $asset['path'] ?? '' }}">
+                        <button type="submit" class="btn btn-outline-danger btn-sm" title="Delete media">
+                          <i class="fa-solid fa-xmark"></i>
+                        </button>
+                      </form>
                     </div>
                   </div>
                 @endforeach
