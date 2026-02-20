@@ -2571,7 +2571,15 @@
       const pageLength = Number($table.data('pageLength') || 10);
       const orderCol = Number($table.data('orderCol') || 0);
       const orderDir = String($table.data('orderDir') || 'desc').toLowerCase() === 'asc' ? 'asc' : 'desc';
-      const lengthMenu = this._parseLengthMenu(String($table.data('lengthMenu') || '').trim());
+      const lengthMenu = this._parseLengthMenu($table.data('lengthMenu'));
+      const emptyText = String($table.data('emptyText') || 'Empty').trim() || 'Empty';
+      const normalizedPageLength = Number.isFinite(pageLength) && pageLength > 0
+        ? Math.max(1, Math.min(pageLength, 100))
+        : (lengthMenu[0] || 10);
+      const defaultPageLength = lengthMenu.includes(normalizedPageLength)
+        ? normalizedPageLength
+        : (lengthMenu[0] || 10);
+      const self = this;
 
       if ($.fn.DataTable.isDataTable(tableEl)) {
         const api = $table.DataTable();
@@ -2581,6 +2589,7 @@
         if (api.columns && typeof api.columns.adjust === 'function') {
           api.columns.adjust();
         }
+        this._styleControls($(api.table().container()), lengthMenu);
         return;
       }
 
@@ -2595,7 +2604,7 @@
         stateSave: true,
         deferRender: true,
         searchDelay: 280,
-        pageLength: Number.isFinite(pageLength) ? Math.max(10, Math.min(pageLength, 100)) : 10,
+        pageLength: defaultPageLength,
         lengthMenu,
         dom: "<'row align-items-center mb-2'<'col-md-6'l><'col-md-6'f>>" +
           "<'row'<'col-12'tr>>" +
@@ -2605,19 +2614,18 @@
           search: '',
           searchPlaceholder: 'Search...',
           lengthMenu: 'Show _MENU_ rows',
-          emptyTable: 'No records found.',
+          emptyTable: emptyText,
+          zeroRecords: emptyText,
+          loadingRecords: 'Loading...',
+          processing: 'Loading...',
         },
         initComplete: function () {
           const $container = $(this.api().table().container());
-          const $length = $container.find('div.dataTables_length select');
-          const $search = $container.find('div.dataTables_filter input');
-          $length.addClass('form-select form-select-sm').attr('aria-label', 'Rows per page');
-          $search.addClass('form-control form-control-sm').attr('aria-label', 'Search table');
+          self._styleControls($container, lengthMenu);
         },
         drawCallback: function () {
           const $container = $(this.api().table().container());
-          $container.find('div.dataTables_length select').addClass('form-select form-select-sm');
-          $container.find('div.dataTables_filter input').addClass('form-control form-control-sm');
+          self._styleControls($container, lengthMenu);
         },
       };
 
@@ -2634,6 +2642,42 @@
 
       $table.DataTable(options);
       $table.data('hDatatableReady', true);
+    },
+
+    _styleControls($container, lengthMenu) {
+      const $length = $container.find('div.dataTables_length select');
+      const $search = $container.find('div.dataTables_filter input');
+      $length.addClass('form-select form-select-sm').attr('aria-label', 'Rows per page');
+      $search.addClass('form-control form-control-sm').attr('aria-label', 'Search table');
+      this._normalizeLengthOptions($length, lengthMenu);
+    },
+
+    _normalizeLengthOptions($select, lengthMenu) {
+      if (!$select || !$select.length) return;
+      const expectedValues = Array.isArray(lengthMenu) && lengthMenu.length
+        ? lengthMenu.map((value) => Number(value)).filter((value) => Number.isFinite(value) && value > 0)
+        : [10, 20, 50, 100];
+
+      if (!expectedValues.length) return;
+
+      const currentLabels = $select.find('option').map((_, option) => String(option.text || '').trim()).get();
+      const expectedLabels = expectedValues.map((value) => String(value));
+      const mismatch = currentLabels.length !== expectedLabels.length
+        || currentLabels.some((label, index) => label !== expectedLabels[index]);
+
+      if (!mismatch) return;
+
+      const currentValue = Number($select.val());
+      $select.empty();
+      expectedValues.forEach((value) => {
+        $select.append($('<option/>', {
+          value,
+          text: String(value),
+        }));
+      });
+
+      const fallback = expectedValues.includes(currentValue) ? currentValue : expectedValues[0];
+      $select.val(String(fallback));
     },
 
     _columns($table) {
@@ -2653,6 +2697,7 @@
           className,
           orderable,
           searchable,
+          defaultContent: '<span class="h-cell-empty">Empty</span>',
         });
       });
 
@@ -2660,27 +2705,21 @@
     },
 
     _parseLengthMenu(raw) {
-      if (!raw) {
-        return [
-          [10, 20, 50, 100],
-          [10, 20, 50, 100],
-        ];
+      const fallback = [10, 20, 50, 100];
+      let values = [];
+
+      if (Array.isArray(raw)) {
+        values = raw.map((item) => Number(item)).filter((item) => Number.isFinite(item) && item > 0);
+      } else if (typeof raw === 'number') {
+        values = [raw];
+      } else {
+        const text = String(raw || '').trim();
+        const matches = text.match(/\d+/g) || [];
+        values = matches.map((item) => Number(item)).filter((item) => Number.isFinite(item) && item > 0);
       }
 
-      const items = raw
-        .split(',')
-        .map((item) => Number(item.trim()))
-        .filter((item) => Number.isFinite(item) && item > 0);
-
-      if (!items.length) {
-        return [
-          [10, 20, 50, 100],
-          [10, 20, 50, 100],
-        ];
-      }
-
-      const unique = Array.from(new Set(items));
-      return [unique, unique];
+      if (!values.length) return fallback;
+      return Array.from(new Set(values));
     },
   };
 

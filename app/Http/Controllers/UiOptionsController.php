@@ -137,16 +137,35 @@ class UiOptionsController extends Controller
 
         $rows = $roles->map(function (Role $role) use ($roleUserCounts, $protected, $request) {
             $isProtected = in_array((string) $role->name, $protected, true);
+            $assignedUsers = (int) ($roleUserCounts[$role->id] ?? 0);
+
+            $actions = '<span class="h-muted">View only</span>';
+            if ($request->user() && $request->user()->can('manage settings')) {
+                $editButton = '<a href="' . e(route('settings.rbac', ['role' => (int) $role->id])) . '#role-editor" data-spa class="btn btn-outline-secondary btn-sm h-action-icon" title="Edit role" aria-label="Edit role"><i class="fa-solid fa-pen-to-square"></i></a>';
+
+                $deleteDisabled = $isProtected || $assignedUsers > 0;
+                $deleteTitle = $deleteDisabled
+                    ? ($isProtected ? 'Protected role cannot be deleted' : 'Role is assigned to users')
+                    : 'Delete role';
+
+                $deleteAction = route('settings.roles.delete', $role);
+                $csrf = csrf_token();
+                $deleteForm = '<form method="POST" action="' . e($deleteAction) . '" class="d-inline-block" data-spa data-confirm="true" data-confirm-title="Delete role?" data-confirm-text="Role will be removed permanently if no user is assigned.">'
+                    . '<input type="hidden" name="_token" value="' . e($csrf) . '">'
+                    . '<input type="hidden" name="_method" value="DELETE">'
+                    . '<button type="submit" class="btn btn-outline-danger btn-sm h-action-icon" title="' . e($deleteTitle) . '" aria-label="Delete role"' . ($deleteDisabled ? ' disabled' : '') . '><i class="fa-solid fa-trash"></i></button>'
+                    . '</form>';
+
+                $actions = '<span class="h-action-group">' . $editButton . $deleteForm . '</span>';
+            }
 
             return [
                 'id' => $role->id,
                 'name' => strtoupper((string) $role->name),
                 'permissions_count' => $role->permissions->count(),
-                'users_count' => (int) ($roleUserCounts[$role->id] ?? 0),
+                'users_count' => $assignedUsers,
                 'is_protected' => $isProtected ? 'Yes' : 'No',
-                'actions' => $request->user() && $request->user()->can('manage settings')
-                    ? '<a href="' . e(route('settings.rbac', ['role' => (int) $role->id])) . '#role-editor" data-spa class="btn btn-outline-secondary btn-sm h-action-icon" title="Edit role" aria-label="Edit role"><i class="fa-solid fa-pen-to-square"></i></a>'
-                    : '<span class="h-muted">View only</span>',
+                'actions' => $actions,
             ];
         })->values();
 

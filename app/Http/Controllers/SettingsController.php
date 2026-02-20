@@ -8,6 +8,7 @@ use App\Support\HealthCheckService;
 use App\Models\User;
 use App\Models\UserActivity;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
@@ -667,18 +668,18 @@ class SettingsController extends Controller
         return back()->with('success', "Access settings updated for {$user->name}.");
     }
 
-    public function updateRoleMatrix(Request $request): RedirectResponse
+    public function updateRoleMatrix(Request $request): RedirectResponse|JsonResponse
     {
         $this->assertCan($request, 'manage settings', 'Only authorized admins can change role access matrix.');
 
         if (!$this->permissionTablesReady()) {
-            return back()->with('error', 'Spatie permission tables are not ready. Run migrations first.');
+            return $this->roleMatrixResponse($request, false, 'Spatie permission tables are not ready. Run migrations first.', 422);
         }
 
         $roleModules = $request->input('role_modules', []);
         $extraPermissions = $request->input('extra_permissions', []);
         if (!is_array($roleModules)) {
-            return back()->with('error', 'Invalid role matrix payload.');
+            return $this->roleMatrixResponse($request, false, 'Invalid role matrix payload.', 422);
         }
         if (!is_array($extraPermissions)) {
             $extraPermissions = [];
@@ -752,7 +753,19 @@ class SettingsController extends Controller
 
         app(PermissionRegistrar::class)->forgetCachedPermissions();
 
-        return back()->with('success', 'Role access matrix updated successfully.');
+        return $this->roleMatrixResponse($request, true, 'Role access matrix updated successfully.');
+    }
+
+    private function roleMatrixResponse(Request $request, bool $ok, string $message, int $status = 200): RedirectResponse|JsonResponse
+    {
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'ok' => $ok,
+                'message' => $message,
+            ], $status);
+        }
+
+        return back()->with($ok ? 'success' : 'error', $message);
     }
 
     public function storeRole(Request $request): RedirectResponse

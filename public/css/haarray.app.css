@@ -2289,6 +2289,35 @@ body.h-sidebar-compact .h-user-card .h-user-role {
   vertical-align: middle;
 }
 
+.hl-settings .h-route-permission-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+}
+
+.hl-settings .h-route-permission-item {
+  border: 1px solid var(--hl-border);
+  border-radius: 10px;
+  background: var(--hl-bg-soft);
+  padding: 8px 10px;
+}
+
+.hl-settings .h-route-permission-title {
+  font-weight: 700;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.hl-settings .h-access-toggle-stack {
+  display: grid;
+  gap: 6px;
+}
+
+.hl-settings .h-access-switch {
+  width: 100%;
+  justify-content: flex-start;
+}
+
 .hl-settings .h-access-extra-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
@@ -2593,26 +2622,17 @@ body.h-sidebar-compact .h-user-card .h-user-role {
 }
 
 .dataTables_wrapper .dataTables_length select {
-  min-width: 84px;
+  min-width: 108px;
   display: inline-block;
   color: var(--hl-text) !important;
   background: var(--bg0) !important;
   border: 1px solid var(--hl-border-strong) !important;
   border-radius: 8px !important;
   height: 34px;
-  padding: 4px 28px 4px 10px !important;
-  padding-right: 26px;
+  padding: 4px 10px !important;
   line-height: 1.2;
-  -webkit-appearance: none;
-  appearance: none;
-  background-image:
-    linear-gradient(45deg, transparent 50%, var(--hl-text-muted) 50%),
-    linear-gradient(135deg, var(--hl-text-muted) 50%, transparent 50%);
-  background-position:
-    calc(100% - 16px) calc(50% + 1px),
-    calc(100% - 11px) calc(50% + 1px);
-  background-size: 5px 5px, 5px 5px;
-  background-repeat: no-repeat;
+  -webkit-appearance: auto;
+  appearance: auto;
 }
 
 .dataTables_wrapper .dataTables_length select option {
@@ -2622,6 +2642,11 @@ body.h-sidebar-compact .h-user-card .h-user-role {
 
 .dataTables_wrapper .dataTables_filter input {
   min-width: 180px;
+}
+
+.dataTables_wrapper .h-cell-empty {
+  color: var(--hl-text-muted);
+  font-size: 12px;
 }
 
 .dataTables_wrapper .pagination .page-link {
