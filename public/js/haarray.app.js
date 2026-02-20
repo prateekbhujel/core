@@ -420,6 +420,7 @@
     refresh(silent = true) {
       const endpoint = $('body').data('notificationsFeedUrl');
       if (!endpoint || this._isLoading || !window.HApi) return;
+      if (silent && document.hidden) return;
 
       this._isLoading = true;
       HApi.get(endpoint)
@@ -676,6 +677,57 @@
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
+    },
+  };
+
+  /* ── DEV HOT RELOAD ───────────────────────────────── */
+  const HHotReload = {
+    _timer: null,
+    _signature: '',
+    _endpoint: '',
+
+    init() {
+      const enabled = Number($('body').data('hotReloadEnabled') || 0) === 1;
+      this._endpoint = String($('body').data('hotReloadUrl') || '').trim();
+
+      if (!enabled || !this._endpoint) {
+        return;
+      }
+
+      this.poll();
+      this._timer = window.setInterval(() => this.poll(), 2500);
+
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) this.poll();
+      });
+    },
+
+    poll() {
+      if (!this._endpoint || document.hidden) return;
+
+      $.ajax({
+        url: this._endpoint,
+        method: 'GET',
+        dataType: 'json',
+        data: { sig: this._signature },
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        global: false,
+      })
+        .done((payload, _status, xhr) => {
+          if (xhr && Number(xhr.status) === 204) return;
+          const nextSignature = String(payload && payload.signature ? payload.signature : '').trim();
+          if (!nextSignature) return;
+
+          if (this._signature && this._signature !== nextSignature) {
+            window.location.reload();
+            return;
+          }
+
+          this._signature = nextSignature;
+        })
+        .fail(() => {
+          // Keep hot reload silent; it is optional and local-only.
+        });
     },
   };
 
@@ -1875,6 +1927,7 @@
     HSearch.init();
     HMediaManager.init();
     HNotify.init();
+    HHotReload.init();
     HPWA.init();
     HDebug.init();
     initAjax();
@@ -1890,6 +1943,7 @@
     window.HSearch = HSearch;
     window.HMediaManager = HMediaManager;
     window.HNotify = HNotify;
+    window.HHotReload = HHotReload;
     window.HPWA = HPWA;
     window.HDebug = HDebug;
     window.HApi = HApi;

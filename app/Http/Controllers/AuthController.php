@@ -4,6 +4,7 @@
 namespace App\Http\Controllers;
 
 use Carbon\Carbon;
+use App\Support\RbacBootstrap;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -13,7 +14,6 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use App\Models\User;
-use Spatie\Permission\Models\Role;
 use Throwable;
 
 class AuthController extends Controller
@@ -79,13 +79,15 @@ class AuthController extends Controller
             'password' => 'required|min:6|confirmed',
         ]);
 
+        $signupRole = app(RbacBootstrap::class)->signupRole();
+
         $user = User::create([
             'name'     => $request->name,
             'email'    => $request->email,
             'password' => Hash::make($request->password),
-            'role' => 'user',
+            'role' => $signupRole,
         ]);
-        $this->syncUserRole($user, 'user');
+        $this->syncUserRole($user, $signupRole);
 
         Auth::login($user);
         return redirect('/dashboard');
@@ -249,7 +251,7 @@ class AuthController extends Controller
                 'email' => $email,
                 'password' => Hash::make(Str::random(32)),
                 'facebook_id' => $facebookId,
-                'role' => 'user',
+                'role' => app(RbacBootstrap::class)->signupRole(),
             ]);
         } else {
             $user->update([
@@ -257,7 +259,7 @@ class AuthController extends Controller
                 'facebook_id' => $facebookId,
             ]);
         }
-        $this->syncUserRole($user, 'user');
+        $this->syncUserRole($user, app(RbacBootstrap::class)->signupRole());
 
         Auth::login($user, true);
         $request->session()->regenerate();
@@ -291,20 +293,7 @@ class AuthController extends Controller
                 return;
             }
 
-            $targetRole = trim((string) ($user->role ?: $fallbackRole));
-            if ($targetRole === '' || !Role::where('name', $targetRole)->exists()) {
-                $targetRole = $fallbackRole;
-            }
-
-            if (!Role::where('name', $targetRole)->exists()) {
-                return;
-            }
-
-            $user->syncRoles([$targetRole]);
-
-            if ($user->role !== $targetRole) {
-                $user->forceFill(['role' => $targetRole])->save();
-            }
+            app(RbacBootstrap::class)->syncUserRole($user, $fallbackRole);
         } catch (Throwable $exception) {
             // Keep authentication flow working even if role tables are not ready.
         }

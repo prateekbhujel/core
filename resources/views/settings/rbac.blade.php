@@ -15,7 +15,7 @@
   <div class="doc-head">
     <div>
       <div class="doc-title">Roles & Permissions</div>
-      <div class="doc-sub">Manage role definitions and permission matrix with a cleaner flow.</div>
+      <div class="doc-sub">Full-page role CRUD + matrix access management for modules and actions.</div>
     </div>
     <span class="h-pill gold">RBAC</span>
   </div>
@@ -30,12 +30,12 @@
       <div class="head h-split">
         <div>
           <div style="font-family:var(--fd);font-size:16px;font-weight:700;">Role Directory</div>
-          <div class="h-muted" style="font-size:13px;">Use modal-based create/edit for role definitions.</div>
+          <div class="h-muted" style="font-size:13px;">Server-side table for role lookup and edit actions.</div>
         </div>
-        <button type="button" class="btn btn-primary btn-sm" id="h-role-create-open">
+        <a href="#role-editor" class="btn btn-primary btn-sm">
           <i class="fa-solid fa-plus me-2"></i>
           Create Role
-        </button>
+        </a>
       </div>
       <div class="body">
         <div class="table-responsive">
@@ -61,6 +61,67 @@
             <tbody></tbody>
           </table>
         </div>
+      </div>
+    </div>
+
+    <div class="h-card-soft mb-3" id="role-editor">
+      <div class="head h-split">
+        <div>
+          <div style="font-family:var(--fd);font-size:16px;font-weight:700;">
+            @if($editRole)
+              Edit Role: {{ strtoupper((string) $editRole->name) }}
+            @else
+              Create Role
+            @endif
+          </div>
+          <div class="h-muted" style="font-size:13px;">
+            @if($editRole)
+              Update role name and permission grants here. For very large role sets, this full-page editor avoids modal overflow issues.
+            @else
+              Create a new role and assign permissions from the full list.
+            @endif
+          </div>
+        </div>
+        @if($editRole)
+          <a href="{{ route('settings.rbac') }}" data-spa class="btn btn-outline-secondary btn-sm">
+            <i class="fa-solid fa-xmark me-1"></i>
+            Cancel Edit
+          </a>
+        @endif
+      </div>
+      <div class="body">
+        <form method="POST" action="{{ $editRole ? route('settings.roles.update', $editRole) : route('settings.roles.store') }}" data-spa>
+          @csrf
+          @if($editRole)
+            @method('PUT')
+          @endif
+
+          @php
+            $selectedPermissions = $editRole ? $editRole->permissions->pluck('name')->values()->all() : [];
+          @endphp
+
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label class="h-label" style="display:block;">Role Name</label>
+              <input type="text" name="name" class="form-control" value="{{ old('name', $editRole ? $editRole->name : '') }}" placeholder="e.g. auditor" required>
+            </div>
+            <div class="col-md-8">
+              <label class="h-label" style="display:block;">Permissions</label>
+              <select name="permissions[]" class="form-select" data-h-select multiple>
+                @foreach($permissionOptions as $permissionName)
+                  <option value="{{ $permissionName }}" @selected(in_array($permissionName, old('permissions', $selectedPermissions), true))>{{ $permissionName }}</option>
+                @endforeach
+              </select>
+            </div>
+          </div>
+
+          <div class="d-flex justify-content-end mt-3">
+            <button type="submit" class="btn btn-primary" data-busy-text="Saving...">
+              <i class="fa-solid fa-floppy-disk me-2"></i>
+              {{ $editRole ? 'Update Role' : 'Create Role' }}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
 
@@ -112,7 +173,7 @@
     <div class="h-card-soft mb-3">
       <div class="head">
         <div style="font-family:var(--fd);font-size:16px;font-weight:700;">Access Matrix</div>
-        <div class="h-muted" style="font-size:13px;">Each role can be set to <strong>None / View / Manage</strong> per module using radio controls.</div>
+        <div class="h-muted" style="font-size:13px;">Each role can be set to <strong>None / View / Manage</strong> per module.</div>
       </div>
 
       <div class="body">
@@ -140,7 +201,6 @@
                       </div>
                     </td>
                     <td class="h-muted" style="font-size:12px;">{{ $module['description'] }}</td>
-
                     @foreach($roleNames as $roleName)
                       @php
                         $currentLevel = $roleAccessMap[$roleName][$moduleKey] ?? ($roleName === 'admin' ? 'manage' : 'none');
@@ -148,18 +208,9 @@
                       @endphp
                       <td>
                         <div class="h-radio-inline">
-                          <label class="h-radio-pill">
-                            <input type="radio" name="{{ $groupName }}" value="none" @checked($currentLevel === 'none')>
-                            <span>Off</span>
-                          </label>
-                          <label class="h-radio-pill">
-                            <input type="radio" name="{{ $groupName }}" value="view" @checked($currentLevel === 'view')>
-                            <span>View</span>
-                          </label>
-                          <label class="h-radio-pill">
-                            <input type="radio" name="{{ $groupName }}" value="manage" @checked($currentLevel === 'manage')>
-                            <span>Manage</span>
-                          </label>
+                          <label class="h-radio-pill"><input type="radio" name="{{ $groupName }}" value="none" @checked($currentLevel === 'none')><span>Off</span></label>
+                          <label class="h-radio-pill"><input type="radio" name="{{ $groupName }}" value="view" @checked($currentLevel === 'view')><span>View</span></label>
+                          <label class="h-radio-pill"><input type="radio" name="{{ $groupName }}" value="manage" @checked($currentLevel === 'manage')><span>Manage</span></label>
                         </div>
                       </td>
                     @endforeach
@@ -170,9 +221,7 @@
           </div>
 
           @php
-            $extraPermissionOptions = collect($permissionOptions)
-              ->reject(fn ($permission) => in_array($permission, $modulePermissionNames, true))
-              ->values();
+            $extraPermissionOptions = collect($permissionOptions)->reject(fn ($permission) => in_array($permission, $modulePermissionNames, true))->values();
           @endphp
 
           <div class="row g-3 mt-1">
@@ -211,130 +260,14 @@
 </div>
 @endsection
 
-@section('modals')
-  @if($hasSpatiePermissions)
-    <div class="h-modal-overlay" id="settings-role-form-modal">
-      <div class="h-modal" style="max-width:760px;">
-        <div class="h-modal-head">
-          <div class="h-modal-title" id="h-role-form-title">Create Role</div>
-          <button class="h-modal-close">×</button>
-        </div>
-        <div class="h-modal-body">
-          <form
-            method="POST"
-            action="{{ route('settings.roles.store') }}"
-            id="h-role-form"
-            data-spa
-            data-store-action="{{ route('settings.roles.store') }}"
-            data-update-template="{{ route('settings.roles.update', ['role' => '__ID__']) }}"
-          >
-            @csrf
-            <span id="h-role-method-holder"></span>
-
-            <div class="mb-3">
-              <label class="h-label" style="display:block;">Role Name</label>
-              <input type="text" name="name" id="h-role-name" class="form-control" placeholder="e.g. auditor" required>
-            </div>
-
-            <div class="mb-2">
-              <label class="h-label" style="display:block;">Permissions</label>
-              <select name="permissions[]" id="h-role-permissions" class="form-select" data-h-select multiple>
-                @foreach($permissionOptions as $permissionName)
-                  <option value="{{ $permissionName }}">{{ $permissionName }}</option>
-                @endforeach
-              </select>
-            </div>
-
-            <div class="d-flex justify-content-end mt-3">
-              <button type="submit" class="btn btn-primary" id="h-role-submit-btn" data-busy-text="Saving...">
-                <i class="fa-solid fa-floppy-disk me-2"></i>
-                Save Role
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
-  @endif
-@endsection
-
 @section('scripts')
 <script>
 (function () {
-  const hasSpatiePermissions = @json($hasSpatiePermissions);
-  if (!hasSpatiePermissions) return;
-
-  const roleCatalog = @json($roleCatalog);
-  const roleMap = new Map((roleCatalog || []).map((row) => [String(row.id), row]));
-
-  const form = document.getElementById('h-role-form');
-  const methodHolder = document.getElementById('h-role-method-holder');
-  const title = document.getElementById('h-role-form-title');
-  const nameInput = document.getElementById('h-role-name');
-  const permissionsSelect = document.getElementById('h-role-permissions');
-  const submitBtn = document.getElementById('h-role-submit-btn');
-
-  if (!form || !methodHolder || !title || !nameInput || !permissionsSelect || !submitBtn) {
-    return;
-  }
-
-  const openModal = () => {
-    if (window.HModal) {
-      window.HModal.open('settings-role-form-modal');
-      return;
-    }
-    const modal = document.getElementById('settings-role-form-modal');
-    if (modal) modal.classList.add('show');
-  };
-
-  const setPermissions = (selected = []) => {
-    const selectedSet = new Set((selected || []).map(String));
-    Array.from(permissionsSelect.options).forEach((option) => {
-      option.selected = selectedSet.has(String(option.value));
-    });
-    permissionsSelect.dispatchEvent(new Event('change', { bubbles: true }));
-  };
-
-  const openCreate = () => {
-    form.setAttribute('action', form.dataset.storeAction);
-    methodHolder.innerHTML = '';
-    title.textContent = 'Create Role';
-    submitBtn.innerHTML = '<i class="fa-solid fa-plus me-2"></i>Create Role';
-
-    nameInput.value = '';
-    setPermissions([]);
-
-    openModal();
-  };
-
-  const openEdit = (roleId) => {
-    const row = roleMap.get(String(roleId));
-    if (!row) return;
-
-    const action = String(form.dataset.updateTemplate || '').replace('__ID__', String(roleId));
-    form.setAttribute('action', action);
-    methodHolder.innerHTML = '<input type="hidden" name="_method" value="PUT">';
-    title.textContent = 'Edit Role: ' + String(row.name || 'Role').toUpperCase();
-    submitBtn.innerHTML = '<i class="fa-solid fa-floppy-disk me-2"></i>Update Role';
-
-    nameInput.value = String(row.name || '');
-    setPermissions(Array.isArray(row.permissions) ? row.permissions : []);
-
-    openModal();
-  };
-
-  const createBtn = document.getElementById('h-role-create-open');
-  if (createBtn) createBtn.addEventListener('click', openCreate);
-
-  document.addEventListener('click', (event) => {
-    const trigger = event.target.closest('[data-role-edit-id]');
-    if (!trigger) return;
-
-    event.preventDefault();
-    const roleId = Number(trigger.getAttribute('data-role-edit-id') || 0);
-    if (!roleId) return;
-    openEdit(roleId);
-  });
+  const params = new URLSearchParams(window.location.search);
+  if (!params.get('role')) return;
+  const target = document.getElementById('role-editor');
+  if (!target) return;
+  setTimeout(() => target.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
 })();
 </script>
 @endsection

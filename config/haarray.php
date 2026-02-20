@@ -98,6 +98,7 @@ return [
     */
     'ops' => [
         'allow_shell_ui' => filter_var(env('HAARRAY_ALLOW_SHELL_UI', false), FILTER_VALIDATE_BOOL),
+        'hot_reload' => filter_var(env('HAARRAY_HOT_RELOAD', true), FILTER_VALIDATE_BOOL),
     ],
 
     /*

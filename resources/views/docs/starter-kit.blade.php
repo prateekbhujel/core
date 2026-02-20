@@ -112,6 +112,16 @@ document.addEventListener('hspa:afterSwap', (event) =&gt; {
           <li>Rehydrate plugins automatically after SPA navigation via <code>hspa:afterSwap</code>.</li>
         </ol>
       </section>
+
+      <section class="doc-block">
+        <h3>Tutorial Packs</h3>
+        <p>Use these docs as implementation blueprints when building your own modules.</p>
+        <ul>
+          <li><code>docs/tutorials/CRUD_WORKFLOW.md</code> for list + create/edit/delete flows.</li>
+          <li><code>docs/tutorials/NOTIFICATION_AUTOMATION.md</code> for model/action based alerts.</li>
+          <li><code>docs/tutorials/INTEGRATIONS_FACEBOOK_TELEGRAM.md</code> for login + bot delivery setup.</li>
+        </ul>
+      </section>
     </div>
 
     <div class="h-tab-panel" data-tab-panel="docs-ui">

@@ -31,6 +31,9 @@ Laravel starter kit for Haarray products with progressive SPA behavior, reusable
 - Diagnostics tabs with DB browser/log/ML checks/user activity visibility
 - Collapsible sidebar settings group with query-aware tab links + dedicated Users/RBAC links
 - Notification tray actions: per-row mark-read + mark-all-read + optional custom audio
+- Notification automation rule builder (activity/CRUD actions -> targeted channels)
+- Advanced health checker (DB/cache/storage/queue/RBAC/notifications)
+- Optional local hot reload polling (theme-safe, low bandwidth)
 
 ## Tech profile
 
@@ -49,10 +52,18 @@ composer install
 cp .env.example .env
 php artisan key:generate
 php artisan migrate
+php artisan db:seed
 php artisan serve
 ```
 
 Open: `http://127.0.0.1:8000`
+
+Default admin seeding (full access) creates:
+
+- `prateekbhujelpb@gmail.com`
+- `admin@admin.com`
+
+Password is from `HAARRAY_ADMIN_PASSWORD` (fallback: `Admin@12345`).
 
 ## Starter architecture
 
@@ -152,6 +163,19 @@ document.addEventListener('hspa:afterSwap', (event) => {
 - Ensure DB credentials, queue, mail, and cache drivers are configured
 - Verify role/permission assignments and route visibility before deployment
 
+## Starter commands
+
+```bash
+# Sync permissions/roles (and optionally ensure admin users)
+php artisan haarray:permissions:sync --seed-admins
+
+# Full starter bootstrap helper
+php artisan haarray:starter:setup --seed-admins
+
+# Health diagnostics from CLI
+php artisan haarray:health:check
+```
+
 ## Running modes
 
 ### Artisan serve
@@ -191,6 +215,10 @@ From Diagnostics UI, run `Fix Storage Permissions` if Blade cache writes fail.
 - Settings page: `/settings` (inside app, authenticated)
 - Technical docs: `docs/STARTER_KIT.md`
 - SPA details: `docs/SPA.md`
+- Tutorials:
+  - `docs/tutorials/CRUD_WORKFLOW.md`
+  - `docs/tutorials/NOTIFICATION_AUTOMATION.md`
+  - `docs/tutorials/INTEGRATIONS_FACEBOOK_TELEGRAM.md`
 
 ## Philosophy
 

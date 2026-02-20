@@ -256,11 +256,31 @@
                 <input type="text" name="telegram_chat_id" class="form-control" value="{{ old('telegram_chat_id', auth()->user()->telegram_chat_id) }}" placeholder="e.g. 123456789">
               </div>
               <div class="col-md-6" style="padding-top:24px;">
-                <div class="h-radio-stack">
-                  <label class="form-check"><input class="form-check-input" type="checkbox" name="two_factor_enabled" value="1" @checked(auth()->user()->two_factor_enabled)><span class="form-check-label">Enable 2FA login</span></label>
-                  <label class="form-check"><input class="form-check-input" type="checkbox" name="receive_in_app_notifications" value="1" @checked(auth()->user()->receive_in_app_notifications)><span class="form-check-label">In-app notifications</span></label>
-                  <label class="form-check"><input class="form-check-input" type="checkbox" name="receive_telegram_notifications" value="1" @checked(auth()->user()->receive_telegram_notifications)><span class="form-check-label">Telegram notifications</span></label>
-                  <label class="form-check"><input class="form-check-input" type="checkbox" name="browser_notifications_enabled" value="1" @checked(auth()->user()->browser_notifications_enabled)><span class="form-check-label">Browser notifications</span></label>
+                <div class="h-switch-wrap">
+                  <label class="h-switch">
+                    <input type="hidden" name="two_factor_enabled" value="0">
+                    <input type="checkbox" name="two_factor_enabled" value="1" @checked(auth()->user()->two_factor_enabled)>
+                    <span class="track"><span class="thumb"></span></span>
+                    <span class="h-switch-text">Enable 2FA Login</span>
+                  </label>
+                  <label class="h-switch">
+                    <input type="hidden" name="receive_in_app_notifications" value="0">
+                    <input type="checkbox" name="receive_in_app_notifications" value="1" @checked(auth()->user()->receive_in_app_notifications)>
+                    <span class="track"><span class="thumb"></span></span>
+                    <span class="h-switch-text">In-App Notifications</span>
+                  </label>
+                  <label class="h-switch">
+                    <input type="hidden" name="receive_telegram_notifications" value="0">
+                    <input type="checkbox" name="receive_telegram_notifications" value="1" @checked(auth()->user()->receive_telegram_notifications)>
+                    <span class="track"><span class="thumb"></span></span>
+                    <span class="h-switch-text">Telegram Notifications</span>
+                  </label>
+                  <label class="h-switch">
+                    <input type="hidden" name="browser_notifications_enabled" value="0">
+                    <input type="checkbox" name="browser_notifications_enabled" value="1" @checked(auth()->user()->browser_notifications_enabled)>
+                    <span class="track"><span class="thumb"></span></span>
+                    <span class="h-switch-text">Browser Notifications</span>
+                  </label>
                 </div>
               </div>
             </div>
@@ -306,6 +326,7 @@
                 <div class="col-md-4">
                   <label class="h-label" style="display:block;">Audience</label>
                   <select name="audience" class="form-select" data-h-select>
+                    <option value="admins">Admins Only</option>
                     <option value="all">All users</option>
                     <option value="role">By role</option>
                     <option value="users">Specific users</option>
@@ -353,6 +374,184 @@
           @endcan
         </div>
       </div>
+
+      @can('manage notifications')
+        <div class="h-card-soft mb-3">
+          <div class="head h-split">
+            <div>
+              <div style="font-family:var(--fd);font-size:16px;font-weight:700;">Automation Rules (CRUD Activity)</div>
+              <div class="h-muted" style="font-size:13px;">Build route/action based notification rules from UI. Supports audience targeting and template placeholders.</div>
+            </div>
+            <button type="button" class="btn btn-outline-secondary btn-sm" id="h-notify-rule-reset">
+              <i class="fa-solid fa-plus me-1"></i>
+              New Rule
+            </button>
+          </div>
+          <div class="body">
+            @if(!empty($automationRules))
+              <div class="table-responsive mb-3">
+                <table class="table table-sm align-middle h-table-sticky-actions">
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>Status</th>
+                      <th>Methods</th>
+                      <th>Route Patterns</th>
+                      <th>Audience</th>
+                      <th class="h-col-actions">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @foreach($automationRules as $rule)
+                      @php
+                        $ruleId = (string) ($rule['id'] ?? 'n/a');
+                        $isActive = (bool) ($rule['active'] ?? false);
+                        $methods = implode(', ', (array) ($rule['methods'] ?? []));
+                        $patterns = implode(', ', (array) ($rule['route_patterns'] ?? []));
+                        $audience = strtoupper((string) data_get($rule, 'audience.type', 'admins'));
+                      @endphp
+                      <tr>
+                        <td><code>{{ $ruleId }}</code></td>
+                        <td>{!! $isActive ? '<span class="h-pill teal">Active</span>' : '<span class="h-pill">Paused</span>' !!}</td>
+                        <td>{{ $methods !== '' ? $methods : 'ALL' }}</td>
+                        <td class="h-muted" style="max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="{{ $patterns }}">{{ $patterns !== '' ? $patterns : '*' }}</td>
+                        <td>{{ $audience }}</td>
+                        <td class="h-col-actions">
+                          <span class="h-action-group">
+                            <button type="button" class="btn btn-outline-secondary btn-sm h-action-icon" data-automation-edit="{{ $ruleId }}" title="Edit rule">
+                              <i class="fa-solid fa-pen-to-square"></i>
+                            </button>
+                            <form method="POST" action="{{ route('settings.notifications.rules.delete', $ruleId) }}" data-spa data-confirm="true" data-confirm-title="Delete automation rule?" data-confirm-text="This rule will be removed permanently.">
+                              @csrf
+                              @method('DELETE')
+                              <button type="submit" class="btn btn-outline-danger btn-sm h-action-icon" title="Delete rule">
+                                <i class="fa-solid fa-trash"></i>
+                              </button>
+                            </form>
+                          </span>
+                        </td>
+                      </tr>
+                    @endforeach
+                  </tbody>
+                </table>
+              </div>
+            @endif
+
+            <form method="POST" action="{{ route('settings.notifications.rules.upsert') }}" data-spa id="h-automation-rule-form">
+              @csrf
+              <input type="hidden" name="rule_id" id="h-rule-id">
+
+              <div class="row g-3">
+                <div class="col-md-3">
+                  <label class="h-label" style="display:block;">Rule Status</label>
+                  <label class="h-switch">
+                    <input type="hidden" name="active" value="0">
+                    <input type="checkbox" name="active" id="h-rule-active" value="1" checked>
+                    <span class="track"><span class="thumb"></span></span>
+                    <span class="h-switch-text">Active Rule</span>
+                  </label>
+                </div>
+                <div class="col-md-3">
+                  <label class="h-label" style="display:block;">Model</label>
+                  <select name="model_key" id="h-rule-model-key" class="form-select" data-h-select>
+                    @foreach($automationModelOptions as $modelKey => $modelLabel)
+                      <option value="{{ $modelKey }}">{{ $modelLabel }}</option>
+                    @endforeach
+                  </select>
+                </div>
+                <div class="col-md-3">
+                  <label class="h-label" style="display:block;">Event</label>
+                  <select name="event_name" id="h-rule-event-name" class="form-select" data-h-select>
+                    <option value="activity.request">Request Completed</option>
+                  </select>
+                </div>
+                <div class="col-md-3">
+                  <label class="h-label" style="display:block;">Level</label>
+                  <select name="level" id="h-rule-level" class="form-select" data-h-select>
+                    <option value="info">Info</option>
+                    <option value="success">Success</option>
+                    <option value="warning">Warning</option>
+                    <option value="error">Error</option>
+                  </select>
+                </div>
+                <div class="col-md-4">
+                  <label class="h-label" style="display:block;">HTTP Methods</label>
+                  <select name="methods[]" id="h-rule-methods" class="form-select" data-h-select multiple>
+                    @foreach(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as $httpMethod)
+                      <option value="{{ $httpMethod }}" @selected(in_array($httpMethod, ['POST','PUT','PATCH','DELETE'], true))>{{ $httpMethod }}</option>
+                    @endforeach
+                  </select>
+                </div>
+                <div class="col-md-4">
+                  <label class="h-label" style="display:block;">Route Patterns</label>
+                  <textarea name="route_patterns" id="h-rule-route-patterns" class="form-control" rows="2" placeholder="settings.users.*, invoices.*"></textarea>
+                </div>
+                <div class="col-md-4">
+                  <label class="h-label" style="display:block;">Throttle Seconds</label>
+                  <input type="number" min="10" max="3600" name="throttle_seconds" id="h-rule-throttle" class="form-control" value="60">
+                </div>
+                <div class="col-md-6">
+                  <label class="h-label" style="display:block;">Title Template</label>
+                  <input type="text" name="title_template" id="h-rule-title-template" class="form-control" value="{actor_name} triggered {method} on {route_name}" required>
+                </div>
+                <div class="col-md-6">
+                  <label class="h-label" style="display:block;">Message Template</label>
+                  <textarea name="message_template" id="h-rule-message-template" class="form-control" rows="2" required>Status {status} at {path} from {ip}.</textarea>
+                </div>
+                <div class="col-md-4">
+                  <label class="h-label" style="display:block;">Audience Type</label>
+                  <select name="audience_type" id="h-rule-audience-type" class="form-select" data-h-select>
+                    <option value="admins">Admins</option>
+                    <option value="all">All Users</option>
+                    <option value="role">Role</option>
+                    <option value="users">Specific Users</option>
+                  </select>
+                </div>
+                <div class="col-md-4">
+                  <label class="h-label" style="display:block;">Audience Role</label>
+                  <select name="audience_role" id="h-rule-audience-role" class="form-select" data-h-select>
+                    <option value="">Choose role</option>
+                    @foreach($automationRoleOptions as $roleName)
+                      <option value="{{ $roleName }}">{{ strtoupper($roleName) }}</option>
+                    @endforeach
+                  </select>
+                </div>
+                <div class="col-md-4">
+                  <label class="h-label" style="display:block;">Audience Users</label>
+                  <select name="audience_user_ids[]" id="h-rule-audience-users" class="form-select" multiple data-select2-remote data-endpoint="{{ route('ui.options.leads') }}" data-placeholder="Search users..." data-min-input="1" data-dropdown-parent="#settings-main-tabs"></select>
+                </div>
+                <div class="col-md-6">
+                  <label class="h-label" style="display:block;">Channels</label>
+                  <div class="h-switch-wrap">
+                    <label class="h-switch">
+                      <input type="checkbox" name="channels[]" value="in_app" id="h-rule-channel-inapp" checked>
+                      <span class="track"><span class="thumb"></span></span>
+                      <span class="h-switch-text">In-App Channel</span>
+                    </label>
+                    <label class="h-switch">
+                      <input type="checkbox" name="channels[]" value="telegram" id="h-rule-channel-telegram">
+                      <span class="track"><span class="thumb"></span></span>
+                      <span class="h-switch-text">Telegram Channel</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div class="h-note mt-3">
+                Available placeholders: <code>{actor_name}</code>, <code>{actor_email}</code>, <code>{method}</code>, <code>{path}</code>, <code>{route_name}</code>, <code>{status}</code>, <code>{ip}</code>, <code>{timestamp}</code>.
+              </div>
+
+              <div class="d-flex justify-content-end mt-3 gap-2">
+                <button type="button" class="btn btn-outline-secondary" id="h-rule-clear-btn">Reset</button>
+                <button type="submit" class="btn btn-primary" data-busy-text="Saving...">
+                  <i class="fa-solid fa-floppy-disk me-2"></i>
+                  Save Automation Rule
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      @endcan
     </div>
 
     @if($canManageSettings)
@@ -431,6 +630,101 @@
             </div>
           </div>
         </div>
+
+        <div class="h-card-soft mb-3" id="h-live-health-card" data-health-endpoint="{{ route('ui.health.report') }}">
+          <div class="head h-split">
+            <div>
+              <div style="font-family:var(--fd);font-size:16px;font-weight:700;">Advanced Health Checker</div>
+              <div class="h-muted" style="font-size:13px;">Live checks for app key, DB, cache, storage, queue, notifications, RBAC, and disk usage.</div>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+              <span class="h-pill teal" id="h-health-generated-at">{{ $healthReport['generated_at'] ?? now()->toDateTimeString() }}</span>
+              <button type="button" class="btn btn-outline-secondary btn-sm" id="h-health-refresh-btn">
+                <i class="fa-solid fa-rotate me-1"></i>
+                Refresh
+              </button>
+            </div>
+          </div>
+          <div class="body">
+            <div class="row g-2 mb-2">
+              <div class="col-md-4"><div class="h-note"><div class="h-ops-metric-label">OK</div><div class="h-ops-metric-value" id="h-health-ok">{{ (int) data_get($healthReport, 'summary.ok', 0) }}</div></div></div>
+              <div class="col-md-4"><div class="h-note"><div class="h-ops-metric-label">WARN</div><div class="h-ops-metric-value" id="h-health-warn">{{ (int) data_get($healthReport, 'summary.warn', 0) }}</div></div></div>
+              <div class="col-md-4"><div class="h-note"><div class="h-ops-metric-label">FAIL</div><div class="h-ops-metric-value" id="h-health-fail">{{ (int) data_get($healthReport, 'summary.fail', 0) }}</div></div></div>
+            </div>
+
+            <div class="table-responsive">
+              <table class="table table-sm align-middle">
+                <thead>
+                  <tr>
+                    <th>Check</th>
+                    <th>Status</th>
+                    <th>Detail</th>
+                    <th>Value</th>
+                  </tr>
+                </thead>
+                <tbody id="h-health-tbody">
+                  @foreach((array) data_get($healthReport, 'checks', []) as $check)
+                    <tr>
+                      <td>{{ $check['label'] ?? 'Check' }}</td>
+                      <td>
+                        @php $status = strtoupper((string) ($check['status'] ?? 'warn')); @endphp
+                        @if($status === 'OK')
+                          <span class="h-pill teal">OK</span>
+                        @elseif($status === 'FAIL')
+                          <span class="h-pill" style="background:rgba(248,113,113,.2);color:#ffb4b4;">FAIL</span>
+                        @else
+                          <span class="h-pill gold">WARN</span>
+                        @endif
+                      </td>
+                      <td class="h-muted">{{ $check['detail'] ?? '' }}</td>
+                      <td><code>{{ $check['value'] ?? '' }}</code></td>
+                    </tr>
+                  @endforeach
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        @if($opsUiEnabled)
+          <div class="h-card-soft mb-3">
+            <div class="head">
+              <div style="font-family:var(--fd);font-size:16px;font-weight:700;">Scheduler / Queue / Ops Runner</div>
+              <div class="h-muted" style="font-size:13px;">Run shared-hosting-safe maintenance commands from UI when needed.</div>
+            </div>
+            <div class="body">
+              <div class="h-ops-action-grid">
+                @foreach([
+                  ['action' => 'sync_permissions', 'label' => 'Sync Permissions', 'icon' => 'fa-user-shield'],
+                  ['action' => 'migrate_status', 'label' => 'Migrate Status', 'icon' => 'fa-database'],
+                  ['action' => 'schedule_list', 'label' => 'Schedule List', 'icon' => 'fa-calendar-check'],
+                  ['action' => 'schedule_run', 'label' => 'Schedule Run', 'icon' => 'fa-clock-rotate-left'],
+                  ['action' => 'queue_restart', 'label' => 'Queue Restart', 'icon' => 'fa-arrows-rotate'],
+                  ['action' => 'queue_work_once', 'label' => 'Queue Work Once', 'icon' => 'fa-list-check'],
+                  ['action' => 'queue_failed', 'label' => 'Queue Failed Jobs', 'icon' => 'fa-triangle-exclamation'],
+                  ['action' => 'queue_flush', 'label' => 'Queue Flush Failed', 'icon' => 'fa-broom'],
+                  ['action' => 'optimize_clear', 'label' => 'Optimize Clear', 'icon' => 'fa-eraser'],
+                  ['action' => 'fix_permissions', 'label' => 'Fix Permissions', 'icon' => 'fa-key'],
+                ] as $opsAction)
+                  <form method="POST" action="{{ route('settings.ops.action') }}" data-spa>
+                    @csrf
+                    <input type="hidden" name="action" value="{{ $opsAction['action'] }}">
+                    <button type="submit" class="btn btn-outline-secondary btn-sm w-100" data-busy-text="Running...">
+                      <i class="fa-solid {{ $opsAction['icon'] }} me-2"></i>
+                      {{ $opsAction['label'] }}
+                    </button>
+                  </form>
+                @endforeach
+              </div>
+              @if(trim((string) $opsOutput) !== '')
+                <div class="h-note mt-3">
+                  <div class="h-ops-metric-label">Last Ops Output</div>
+                  <pre style="margin:8px 0 0;max-height:260px;overflow:auto;white-space:pre-wrap;color:var(--t1);font-family:var(--fm);font-size:11px;">{{ $opsOutput }}</pre>
+                </div>
+              @endif
+            </div>
+          </div>
+        @endif
 
         <div class="h-card-soft mb-3">
           <div class="head"><div style="font-family:var(--fd);font-size:16px;font-weight:700;">Database Browser</div><div class="h-muted" style="font-size:13px;">Read-only table preview from active connection.</div></div>
@@ -534,6 +828,7 @@
 (function () {
   const tabs = document.getElementById('settings-main-tabs');
   if (!tabs) return;
+  const automationRules = @json($automationRules ?? []);
 
   const updateQuery = (tabId) => {
     const url = new URL(window.location.href);
@@ -589,6 +884,214 @@
   };
 
   bindFilePreviews();
+
+  const ruleForm = document.getElementById('h-automation-rule-form');
+  const clearRuleBtn = document.getElementById('h-rule-clear-btn');
+  const newRuleBtn = document.getElementById('h-notify-rule-reset');
+  const ruleMap = new Map((automationRules || []).map((rule) => [String(rule.id || ''), rule]));
+
+  const setMultiSelectValues = (selectEl, values = []) => {
+    if (!selectEl) return;
+    const expected = new Set((values || []).map(String));
+    Array.from(selectEl.options).forEach((option) => {
+      option.selected = expected.has(String(option.value));
+    });
+    selectEl.dispatchEvent(new Event('change', { bubbles: true }));
+  };
+
+  const resetRuleForm = () => {
+    if (!ruleForm) return;
+    const id = document.getElementById('h-rule-id');
+    const active = document.getElementById('h-rule-active');
+    const model = document.getElementById('h-rule-model-key');
+    const eventName = document.getElementById('h-rule-event-name');
+    const level = document.getElementById('h-rule-level');
+    const methods = document.getElementById('h-rule-methods');
+    const routePatterns = document.getElementById('h-rule-route-patterns');
+    const titleTemplate = document.getElementById('h-rule-title-template');
+    const messageTemplate = document.getElementById('h-rule-message-template');
+    const audienceType = document.getElementById('h-rule-audience-type');
+    const audienceRole = document.getElementById('h-rule-audience-role');
+    const audienceUsers = document.getElementById('h-rule-audience-users');
+    const channelInApp = document.getElementById('h-rule-channel-inapp');
+    const channelTelegram = document.getElementById('h-rule-channel-telegram');
+    const throttle = document.getElementById('h-rule-throttle');
+
+    if (id) id.value = '';
+    if (active) active.checked = true;
+    if (model) model.value = 'activity';
+    if (eventName) eventName.value = 'activity.request';
+    if (level) level.value = 'info';
+    if (methods) setMultiSelectValues(methods, ['POST', 'PUT', 'PATCH', 'DELETE']);
+    if (routePatterns) routePatterns.value = '';
+    if (titleTemplate) titleTemplate.value = '{actor_name} triggered {method} on {route_name}';
+    if (messageTemplate) messageTemplate.value = 'Status {status} at {path} from {ip}.';
+    if (audienceType) audienceType.value = 'admins';
+    if (audienceRole) audienceRole.value = '';
+    if (audienceUsers) {
+      Array.from(audienceUsers.options).forEach((option) => {
+        option.selected = false;
+      });
+      audienceUsers.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    if (channelInApp) channelInApp.checked = true;
+    if (channelTelegram) channelTelegram.checked = false;
+    if (throttle) throttle.value = '60';
+  };
+
+  const loadRule = (ruleId) => {
+    if (!ruleForm) return;
+    const rule = ruleMap.get(String(ruleId || ''));
+    if (!rule) return;
+
+    const id = document.getElementById('h-rule-id');
+    const active = document.getElementById('h-rule-active');
+    const model = document.getElementById('h-rule-model-key');
+    const eventName = document.getElementById('h-rule-event-name');
+    const level = document.getElementById('h-rule-level');
+    const methods = document.getElementById('h-rule-methods');
+    const routePatterns = document.getElementById('h-rule-route-patterns');
+    const titleTemplate = document.getElementById('h-rule-title-template');
+    const messageTemplate = document.getElementById('h-rule-message-template');
+    const audienceType = document.getElementById('h-rule-audience-type');
+    const audienceRole = document.getElementById('h-rule-audience-role');
+    const audienceUsers = document.getElementById('h-rule-audience-users');
+    const channelInApp = document.getElementById('h-rule-channel-inapp');
+    const channelTelegram = document.getElementById('h-rule-channel-telegram');
+    const throttle = document.getElementById('h-rule-throttle');
+
+    if (id) id.value = String(rule.id || '');
+    if (active) active.checked = Boolean(rule.active);
+    if (model) model.value = String(rule.model_key || 'activity');
+    if (eventName) eventName.value = String(rule.event_name || 'activity.request');
+    if (level) level.value = String(rule.level || 'info');
+    if (methods) setMultiSelectValues(methods, Array.isArray(rule.methods) ? rule.methods : []);
+    if (routePatterns) routePatterns.value = Array.isArray(rule.route_patterns) ? rule.route_patterns.join(', ') : '';
+    if (titleTemplate) titleTemplate.value = String(rule.title_template || '');
+    if (messageTemplate) messageTemplate.value = String(rule.message_template || '');
+    if (audienceType) audienceType.value = String((rule.audience && rule.audience.type) || 'admins');
+    if (audienceRole) audienceRole.value = String((rule.audience && rule.audience.role) || '');
+    if (channelInApp) channelInApp.checked = Array.isArray(rule.channels) ? rule.channels.includes('in_app') : true;
+    if (channelTelegram) channelTelegram.checked = Array.isArray(rule.channels) ? rule.channels.includes('telegram') : false;
+    if (throttle) throttle.value = String(rule.throttle_seconds || 60);
+
+    if (audienceUsers) {
+      const userIds = Array.isArray(rule.audience && rule.audience.user_ids) ? rule.audience.user_ids : [];
+      Array.from(audienceUsers.options).forEach((option) => {
+        option.selected = false;
+      });
+
+      userIds.forEach((rawId) => {
+        const userId = String(rawId || '').trim();
+        if (!userId) return;
+        let option = Array.from(audienceUsers.options).find((item) => String(item.value) === userId);
+        if (!option) {
+          option = new Option('User #' + userId, userId, true, true);
+          audienceUsers.add(option);
+        } else {
+          option.selected = true;
+        }
+      });
+
+      audienceUsers.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    ruleForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  if (newRuleBtn) {
+    newRuleBtn.addEventListener('click', resetRuleForm);
+  }
+  if (clearRuleBtn) {
+    clearRuleBtn.addEventListener('click', resetRuleForm);
+  }
+  resetRuleForm();
+
+  document.addEventListener('click', (event) => {
+    const trigger = event.target.closest('[data-automation-edit]');
+    if (!trigger) return;
+    event.preventDefault();
+    loadRule(String(trigger.getAttribute('data-automation-edit') || ''));
+  });
+
+  const healthCard = document.getElementById('h-live-health-card');
+  const healthRefreshBtn = document.getElementById('h-health-refresh-btn');
+  let healthTimer = null;
+  const healthEndpoint = healthCard ? String(healthCard.dataset.healthEndpoint || '').trim() : '';
+
+  const renderHealth = (payload) => {
+    if (!payload || typeof payload !== 'object') return;
+    const summary = payload.summary || {};
+    const checks = Array.isArray(payload.checks) ? payload.checks : [];
+
+    const okEl = document.getElementById('h-health-ok');
+    const warnEl = document.getElementById('h-health-warn');
+    const failEl = document.getElementById('h-health-fail');
+    const generatedAt = document.getElementById('h-health-generated-at');
+    const tbody = document.getElementById('h-health-tbody');
+
+    if (okEl) okEl.textContent = String(summary.ok || 0);
+    if (warnEl) warnEl.textContent = String(summary.warn || 0);
+    if (failEl) failEl.textContent = String(summary.fail || 0);
+    if (generatedAt) generatedAt.textContent = String(payload.generated_at || '');
+
+    if (!tbody) return;
+    tbody.innerHTML = checks.map((check) => {
+      const status = String(check.status || 'warn').toUpperCase();
+      const pill = status === 'OK'
+        ? '<span class="h-pill teal">OK</span>'
+        : (status === 'FAIL'
+            ? '<span class="h-pill" style="background:rgba(248,113,113,.2);color:#ffb4b4;">FAIL</span>'
+            : '<span class="h-pill gold">WARN</span>');
+      return `
+        <tr>
+          <td>${String(check.label || 'Check')}</td>
+          <td>${pill}</td>
+          <td class="h-muted">${String(check.detail || '')}</td>
+          <td><code>${String(check.value || '')}</code></td>
+        </tr>
+      `;
+    }).join('');
+  };
+
+  const refreshHealth = () => {
+    if (!healthEndpoint || !window.HApi) return;
+    if (document.hidden) return;
+    HApi.get(healthEndpoint, {}, { global: false })
+      .done((payload) => renderHealth(payload))
+      .fail(() => {
+        // Keep diagnostics panel resilient without noisy toasts.
+      });
+  };
+
+  const diagnosticsActive = () => String(tabs.dataset.activeTab || '') === 'settings-diagnostics';
+  const bootHealthPolling = () => {
+    if (!healthEndpoint) return;
+    if (healthTimer) clearInterval(healthTimer);
+    healthTimer = setInterval(() => {
+      if (diagnosticsActive()) refreshHealth();
+    }, 30000);
+  };
+
+  if (healthRefreshBtn) {
+    healthRefreshBtn.addEventListener('click', (event) => {
+      event.preventDefault();
+      refreshHealth();
+    });
+  }
+
+  document.addEventListener('h:tabs:changed', (event) => {
+    if (!event.detail || event.detail.container !== tabs) return;
+    if (event.detail.tabId === 'settings-diagnostics') refreshHealth();
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && diagnosticsActive()) {
+      refreshHealth();
+    }
+  });
+
+  bootHealthPolling();
 })();
 </script>
 @endsection

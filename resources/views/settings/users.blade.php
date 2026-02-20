@@ -209,24 +209,30 @@
             <div class="h-user-channel-grid">
               <div>
                 <label class="h-label" style="display:block;margin-bottom:6px;">In-app Notifications</label>
-                <div class="h-radio-inline">
-                  <label class="h-radio-pill"><input type="radio" name="receive_in_app_notifications" value="1"><span>On</span></label>
-                  <label class="h-radio-pill"><input type="radio" name="receive_in_app_notifications" value="0"><span>Off</span></label>
-                </div>
+                <label class="h-switch">
+                  <input type="hidden" name="receive_in_app_notifications" value="0">
+                  <input type="checkbox" name="receive_in_app_notifications" value="1" id="h-notify-inapp">
+                  <span class="track"><span class="thumb"></span></span>
+                  <span class="h-switch-text">Enabled</span>
+                </label>
               </div>
               <div>
                 <label class="h-label" style="display:block;margin-bottom:6px;">Telegram Notifications</label>
-                <div class="h-radio-inline">
-                  <label class="h-radio-pill"><input type="radio" name="receive_telegram_notifications" value="1"><span>On</span></label>
-                  <label class="h-radio-pill"><input type="radio" name="receive_telegram_notifications" value="0"><span>Off</span></label>
-                </div>
+                <label class="h-switch">
+                  <input type="hidden" name="receive_telegram_notifications" value="0">
+                  <input type="checkbox" name="receive_telegram_notifications" value="1" id="h-notify-telegram-toggle">
+                  <span class="track"><span class="thumb"></span></span>
+                  <span class="h-switch-text">Enabled</span>
+                </label>
               </div>
               <div>
                 <label class="h-label" style="display:block;margin-bottom:6px;">Browser Notifications</label>
-                <div class="h-radio-inline">
-                  <label class="h-radio-pill"><input type="radio" name="browser_notifications_enabled" value="1"><span>On</span></label>
-                  <label class="h-radio-pill"><input type="radio" name="browser_notifications_enabled" value="0"><span>Off</span></label>
-                </div>
+                <label class="h-switch">
+                  <input type="hidden" name="browser_notifications_enabled" value="0">
+                  <input type="checkbox" name="browser_notifications_enabled" value="1" id="h-notify-browser">
+                  <span class="track"><span class="thumb"></span></span>
+                  <span class="h-switch-text">Enabled</span>
+                </label>
               </div>
             </div>
 
@@ -326,10 +332,9 @@
     });
   };
 
-  const setNotifyRadio = (name, enabled) => {
-    notifyForm.querySelectorAll('input[type="radio"][name="' + name + '"]').forEach((radio) => {
-      radio.checked = String(radio.value) === (enabled ? '1' : '0');
-    });
+  const setNotifyToggle = (name, enabled) => {
+    const checkbox = notifyForm.querySelector('input[type="checkbox"][name="' + name + '"]');
+    if (checkbox) checkbox.checked = Boolean(enabled);
   };
 
   const openCreate = () => {
@@ -391,9 +396,9 @@
     notifyTitle.textContent = 'Notification Channels: ' + String(user.name || 'User');
 
     notifyTelegram.value = String(user.telegram_chat_id || '');
-    setNotifyRadio('receive_in_app_notifications', Boolean(user.receive_in_app_notifications));
-    setNotifyRadio('receive_telegram_notifications', Boolean(user.receive_telegram_notifications));
-    setNotifyRadio('browser_notifications_enabled', Boolean(user.browser_notifications_enabled));
+    setNotifyToggle('receive_in_app_notifications', Boolean(user.receive_in_app_notifications));
+    setNotifyToggle('receive_telegram_notifications', Boolean(user.receive_telegram_notifications));
+    setNotifyToggle('browser_notifications_enabled', Boolean(user.browser_notifications_enabled));
 
     openModal('settings-users-notify-modal');
   };

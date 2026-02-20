@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\UserActivity;
+use App\Support\ActivityNotificationAutomation;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
@@ -40,6 +41,8 @@ class TrackUserActivity
                     'status' => $response->getStatusCode(),
                 ],
             ]);
+
+            app(ActivityNotificationAutomation::class)->dispatch($request, $response, $user);
         } catch (\Throwable $exception) {
             // Never block user flows on activity tracking failures.
         }

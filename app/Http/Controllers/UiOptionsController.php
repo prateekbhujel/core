@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\UserActivity;
 use App\Models\User;
 use App\Support\AppSettings;
+use App\Support\HealthCheckService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -144,7 +145,7 @@ class UiOptionsController extends Controller
                 'users_count' => (int) ($roleUserCounts[$role->id] ?? 0),
                 'is_protected' => $isProtected ? 'Yes' : 'No',
                 'actions' => $request->user() && $request->user()->can('manage settings')
-                    ? '<button type="button" class="btn btn-outline-secondary btn-sm h-action-icon" data-role-edit-id="' . (int) $role->id . '" title="Edit role" aria-label="Edit role"><i class="fa-solid fa-pen-to-square"></i></button>'
+                    ? '<a href="' . e(route('settings.rbac', ['role' => (int) $role->id])) . '#role-editor" data-spa class="btn btn-outline-secondary btn-sm h-action-icon" title="Edit role" aria-label="Edit role"><i class="fa-solid fa-pen-to-square"></i></a>'
                     : '<span class="h-muted">View only</span>',
             ];
         })->values();
@@ -182,6 +183,34 @@ class UiOptionsController extends Controller
             })
             ->editColumn('created_at', fn (UserActivity $activity) => optional($activity->created_at)->format('Y-m-d H:i:s'))
             ->toJson();
+    }
+
+    public function healthReport(Request $request, HealthCheckService $health): JsonResponse
+    {
+        if (!$request->user() || !$request->user()->can('view settings')) {
+            abort(403, 'You do not have permission to view health diagnostics.');
+        }
+
+        return response()->json($health->report());
+    }
+
+    public function hotReloadSignature(Request $request): JsonResponse
+    {
+        if (!app()->environment('local') || !filter_var((string) env('HAARRAY_HOT_RELOAD', 'true'), FILTER_VALIDATE_BOOL)) {
+            abort(404);
+        }
+
+        $signature = $this->computeHotReloadSignature();
+        $current = trim((string) $request->query('sig', ''));
+
+        if ($current !== '' && hash_equals($current, $signature)) {
+            return response()->json([], 204);
+        }
+
+        return response()->json([
+            'signature' => $signature,
+            'generated_at' => now()->toDateTimeString(),
+        ]);
     }
 
     public function fileManagerList(Request $request): JsonResponse
@@ -548,5 +577,39 @@ class UiOptionsController extends Controller
             ->pluck('total', 'role_id')
             ->map(fn ($value) => (int) $value)
             ->all();
+    }
+
+    private function computeHotReloadSignature(): string
+    {
+        $files = [
+            public_path('css/haarray.app.css'),
+            public_path('js/haarray.app.js'),
+            base_path('routes/web.php'),
+            resource_path('views/layouts/app.blade.php'),
+            resource_path('views/dashboard.blade.php'),
+            resource_path('views/settings/index.blade.php'),
+            resource_path('views/settings/users.blade.php'),
+            resource_path('views/settings/rbac.blade.php'),
+            resource_path('views/docs/starter-kit.blade.php'),
+        ];
+
+        $buffer = [];
+        foreach ($files as $file) {
+            if (!File::exists($file)) {
+                continue;
+            }
+
+            try {
+                $buffer[] = $file . ':' . (string) File::lastModified($file);
+            } catch (Throwable) {
+                // Ignore unreadable files in hot-reload signature generation.
+            }
+        }
+
+        if (empty($buffer)) {
+            return sha1((string) microtime(true));
+        }
+
+        return sha1(implode('|', $buffer));
     }
 }

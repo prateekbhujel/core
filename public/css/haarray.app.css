@@ -661,13 +661,13 @@ body.h-sidebar-compact .h-user-card .h-user-role {
 /* ── MODAL ── */
 .h-modal-overlay { position:fixed; inset:0; background:rgba(6,6,9,.76); backdrop-filter:blur(6px); z-index:500; display:flex; align-items:center; justify-content:center; padding:20px; opacity:0; pointer-events:none; transition:opacity .25s; }
 .h-modal-overlay.show { opacity:1; pointer-events:all; }
-.h-modal { background:var(--bg4); border:1px solid var(--bd2); border-radius:20px; width:100%; max-width:460px; max-height:90vh; overflow-y:auto; transform:translateY(14px) scale(.98); transition:transform .25s; box-shadow:0 24px 60px rgba(0,0,0,.5); }
+.h-modal { background:var(--bg4); border:1px solid var(--bd2); border-radius:20px; width:100%; max-width:460px; max-height:90vh; overflow:hidden; display:flex; flex-direction:column; transform:translateY(14px) scale(.98); transition:transform .25s; box-shadow:0 24px 60px rgba(0,0,0,.5); }
 .h-modal-overlay.show .h-modal { transform:translateY(0) scale(1); }
 .h-modal-head { display:flex; align-items:center; justify-content:space-between; padding:18px 22px 14px; border-bottom:1px solid var(--bd); }
 .h-modal-title { font-family:var(--fd); font-weight:700; font-size:16px; }
 .h-modal-close { width:28px; height:28px; border-radius:7px; background:var(--bg3); border:none; color:var(--t2); display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:18px; line-height:1; transition:background .15s; }
 .h-modal-close:hover { background:rgba(248,113,113,.14); color:var(--red); }
-.h-modal-body { padding:20px 22px; }
+.h-modal-body { padding:20px 22px; max-height:calc(90vh - 120px); overflow:auto; }
 .h-modal-footer { padding:12px 22px 20px; display:flex; gap:10px; justify-content:flex-end; }
 
 .h-search-modal {
@@ -2352,6 +2352,10 @@ body.h-sidebar-compact .h-user-card .h-user-role {
   pointer-events: none;
 }
 
+.hl-settings .h-switch input[type='hidden'] {
+  display: none;
+}
+
 .hl-settings .h-switch .track {
   width: 34px;
   height: 20px;
@@ -2405,6 +2409,12 @@ body.h-sidebar-compact .h-user-card .h-user-role {
 .hl-settings .h-access-user-table .select2-container,
 .hl-settings .h-access-extra-grid .select2-container {
   min-width: 200px;
+}
+
+.hl-settings .h-ops-action-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
 }
 
 .hl-settings .h-perm-grid {
@@ -2549,6 +2559,18 @@ body.h-sidebar-compact .h-user-card .h-user-role {
   word-break: break-word;
 }
 
+.hl-settings .table td,
+.hl-settings .table th,
+.hl-settings .form-check-label,
+.hl-settings .form-text {
+  color: var(--hl-text-soft);
+}
+
+.text-muted,
+.text-secondary {
+  color: var(--hl-text-muted) !important;
+}
+
 .dataTables_wrapper .dataTables_length label,
 .dataTables_wrapper .dataTables_filter label,
 .dataTables_wrapper .dataTables_info,
@@ -2688,6 +2710,7 @@ table.h-table-sticky-actions td.h-col-actions {
 [data-theme='dark'],
 [data-theme='light'] {
   --bs-primary: var(--gold);
+  --bs-primary-text-emphasis: var(--gold);
   --bs-secondary: #7f8aa3;
   --bs-success: var(--green);
   --bs-danger: var(--red);
@@ -2708,6 +2731,33 @@ table.h-table-sticky-actions td.h-col-actions {
   --bs-table-border-color: var(--bd);
   --bs-modal-bg: var(--bg2);
   --bs-modal-color: var(--t1);
+}
+
+.btn-primary {
+  --bs-btn-bg: var(--gold);
+  --bs-btn-border-color: var(--gold);
+  --bs-btn-hover-bg: color-mix(in srgb, var(--gold) 88%, #000 12%);
+  --bs-btn-hover-border-color: color-mix(in srgb, var(--gold) 88%, #000 12%);
+  --bs-btn-active-bg: color-mix(in srgb, var(--gold) 82%, #000 18%);
+  --bs-btn-active-border-color: color-mix(in srgb, var(--gold) 82%, #000 18%);
+  --bs-btn-color: #04070f;
+}
+
+.btn-outline-primary {
+  --bs-btn-color: var(--gold);
+  --bs-btn-border-color: var(--gold);
+  --bs-btn-hover-bg: rgba(47, 125, 246, 0.16);
+  --bs-btn-hover-border-color: var(--gold);
+  --bs-btn-active-bg: rgba(47, 125, 246, 0.24);
+  --bs-btn-active-border-color: var(--gold);
+}
+
+.text-primary {
+  color: var(--gold) !important;
+}
+
+.bg-primary {
+  background-color: color-mix(in srgb, var(--gold) 85%, #000 15%) !important;
 }
 
 .table {

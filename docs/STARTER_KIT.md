@@ -276,3 +276,46 @@ chmod 0666 .env
   - `GET /ui/file-manager` (image/audio list)
   - `POST /ui/file-manager/upload` (image/audio upload)
 - Any input can receive picked URLs with `data-media-manager-open data-media-target="input-id"`.
+
+## 13. Admin seeding and RBAC sync
+
+Starter now includes a dedicated admin bootstrap flow:
+
+```bash
+php artisan haarray:permissions:sync --seed-admins
+```
+
+This command:
+
+- syncs roles + permissions
+- ensures default admin accounts
+- keeps signup role on least privilege (`user` -> dashboard/notification baseline)
+
+## 14. Health checker and ops runner
+
+- Diagnostics tab includes a live health checker panel.
+- CLI equivalent:
+
+```bash
+php artisan haarray:health:check
+```
+
+- Scheduler/queue actions are also available from Diagnostics > Ops Runner.
+
+## 15. Notification automation rules
+
+Settings > Notifications includes a CRUD activity rule builder:
+
+- match methods + route patterns
+- choose audience + channels
+- use placeholders (`{actor_name}`, `{route_name}`, `{status}`, etc.)
+
+Rules are stored in app settings key:
+
+- `notifications.automation_rules_json`
+
+## 16. Tutorials
+
+- `docs/tutorials/CRUD_WORKFLOW.md`
+- `docs/tutorials/NOTIFICATION_AUTOMATION.md`
+- `docs/tutorials/INTEGRATIONS_FACEBOOK_TELEGRAM.md`

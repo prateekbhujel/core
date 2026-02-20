@@ -24,6 +24,7 @@
     if ($brandDisplayName === '') {
       $brandDisplayName = (string) config('app.name', 'HariLog');
     }
+    $hotReloadEnabled = app()->environment('local') && filter_var((string) env('HAARRAY_HOT_RELOAD', 'true'), FILTER_VALIDATE_BOOL);
   @endphp
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -70,6 +71,8 @@
   data-theme-color="{{ $themeColor }}"
   data-notification-read-all-url="{{ auth()->user()->can('view notifications') ? route('notifications.read_all') : '' }}"
   data-notification-sound-url="{{ $brandNotificationSound }}"
+  data-hot-reload-enabled="{{ $hotReloadEnabled ? '1' : '0' }}"
+  data-hot-reload-url="{{ route('ui.hot_reload.signature') }}"
 >
 
 {{-- Sidebar overlay (mobile) --}}

@@ -61,6 +61,14 @@ Route::middleware('auth')->group(function () {
         ->middleware('permission:view settings')
         ->name('settings.security');
 
+    Route::post('/settings/notifications/rules', [SettingsController::class, 'upsertNotificationRule'])
+        ->middleware('permission:manage notifications')
+        ->name('settings.notifications.rules.upsert');
+
+    Route::delete('/settings/notifications/rules/{ruleId}', [SettingsController::class, 'deleteNotificationRule'])
+        ->middleware('permission:manage notifications')
+        ->name('settings.notifications.rules.delete');
+
     Route::post('/profile', [SettingsController::class, 'updateProfile'])
         ->name('profile.update');
 
@@ -143,6 +151,13 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/ui/search/global', [UiOptionsController::class, 'globalSearch'])
         ->name('ui.search.global');
+
+    Route::get('/ui/health/report', [UiOptionsController::class, 'healthReport'])
+        ->middleware('permission:view settings')
+        ->name('ui.health.report');
+
+    Route::get('/ui/hot-reload/signature', [UiOptionsController::class, 'hotReloadSignature'])
+        ->name('ui.hot_reload.signature');
 
     Route::get('/ui/datatables/users', [UiOptionsController::class, 'usersTable'])
         ->middleware('permission:view users')

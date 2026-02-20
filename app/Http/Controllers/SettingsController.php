@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Services\AdvancedMLService;
 use App\Support\AppSettings;
+use App\Support\HealthCheckService;
 use App\Models\User;
 use App\Models\UserActivity;
 use Illuminate\Http\UploadedFile;
@@ -36,6 +37,10 @@ class SettingsController extends Controller
         $mediaLibrary = $this->brandingMediaLibrary();
         $notificationSoundUrl = AppSettings::resolveUiAsset(AppSettings::get('ui.notification_sound_url', ''));
         $searchRegistryJson = AppSettings::get('search.registry_json', '');
+        $automationRules = $this->notificationAutomationRules();
+        $automationModelOptions = $this->notificationAutomationModelOptions();
+        $automationRoleOptions = $this->availableRoleNames();
+        $healthReport = app(HealthCheckService::class)->report();
 
         $fields = $this->fields();
         $values = $this->readEnvValues(array_keys($fields));
@@ -73,6 +78,10 @@ class SettingsController extends Controller
             'mediaLibrary' => $mediaLibrary,
             'notificationSoundUrl' => $notificationSoundUrl,
             'searchRegistryJson' => $searchRegistryJson,
+            'automationRules' => $automationRules,
+            'automationModelOptions' => $automationModelOptions,
+            'automationRoleOptions' => $automationRoleOptions,
+            'healthReport' => $healthReport,
         ]);
     }
 
@@ -1057,6 +1066,97 @@ class SettingsController extends Controller
         return back()->with('success', 'Profile updated successfully.');
     }
 
+    public function upsertNotificationRule(Request $request): RedirectResponse
+    {
+        $this->assertCan($request, 'manage notifications', 'Only authorized admins can manage notification automation rules.');
+
+        $availableRoles = $this->availableRoleNames();
+        $availableModels = array_keys($this->notificationAutomationModelOptions());
+
+        $validated = $request->validate([
+            'rule_id' => ['nullable', 'string', 'max:80'],
+            'active' => ['nullable', 'boolean'],
+            'model_key' => ['required', 'string', Rule::in($availableModels)],
+            'event_name' => ['required', 'string', Rule::in(['activity.request'])],
+            'methods' => ['nullable', 'array'],
+            'methods.*' => ['string', Rule::in(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'])],
+            'route_patterns' => ['nullable', 'string', 'max:400'],
+            'title_template' => ['required', 'string', 'max:180'],
+            'message_template' => ['required', 'string', 'max:1200'],
+            'level' => ['required', Rule::in(['info', 'success', 'warning', 'error'])],
+            'audience_type' => ['required', Rule::in(['admins', 'all', 'role', 'users'])],
+            'audience_role' => ['nullable', 'string', Rule::in($availableRoles)],
+            'audience_user_ids' => ['nullable', 'array'],
+            'audience_user_ids.*' => ['integer', 'exists:users,id'],
+            'channels' => ['nullable', 'array'],
+            'channels.*' => ['string', Rule::in(['in_app', 'telegram'])],
+            'throttle_seconds' => ['nullable', 'integer', 'between:10,3600'],
+        ]);
+
+        $rules = $this->notificationAutomationRules();
+        $ruleId = trim((string) ($validated['rule_id'] ?? ''));
+        if ($ruleId === '') {
+            $ruleId = 'rule_' . Str::lower(Str::random(10));
+        }
+
+        $routePatterns = array_values(array_filter(array_map(
+            fn ($item) => trim((string) $item),
+            preg_split('/[\r\n,]+/', (string) ($validated['route_patterns'] ?? '')) ?: []
+        ), fn ($item) => $item !== ''));
+
+        $payload = [
+            'id' => $ruleId,
+            'active' => (bool) $request->boolean('active', true),
+            'model_key' => (string) $validated['model_key'],
+            'event_name' => (string) $validated['event_name'],
+            'methods' => array_values(array_unique((array) ($validated['methods'] ?? ['POST', 'PUT', 'PATCH', 'DELETE']))),
+            'route_patterns' => $routePatterns,
+            'title_template' => trim((string) $validated['title_template']),
+            'message_template' => trim((string) $validated['message_template']),
+            'level' => (string) $validated['level'],
+            'channels' => array_values(array_unique((array) ($validated['channels'] ?? ['in_app']))),
+            'throttle_seconds' => (int) ($validated['throttle_seconds'] ?? 60),
+            'audience' => [
+                'type' => (string) $validated['audience_type'],
+                'role' => (string) ($validated['audience_role'] ?? ''),
+                'user_ids' => array_values(array_map('intval', (array) ($validated['audience_user_ids'] ?? []))),
+            ],
+        ];
+
+        $found = false;
+        foreach ($rules as $index => $rule) {
+            if ((string) ($rule['id'] ?? '') !== $ruleId) {
+                continue;
+            }
+            $rules[$index] = $payload;
+            $found = true;
+            break;
+        }
+        if (!$found) {
+            $rules[] = $payload;
+        }
+
+        $this->saveNotificationAutomationRules($rules);
+
+        return back()->with('success', 'Notification automation rule saved.');
+    }
+
+    public function deleteNotificationRule(Request $request, string $ruleId): RedirectResponse
+    {
+        $this->assertCan($request, 'manage notifications', 'Only authorized admins can delete notification automation rules.');
+
+        $ruleId = trim((string) $ruleId);
+        if ($ruleId === '') {
+            return back()->with('error', 'Invalid rule ID.');
+        }
+
+        $rules = $this->notificationAutomationRules();
+        $filtered = array_values(array_filter($rules, fn ($rule) => (string) ($rule['id'] ?? '') !== $ruleId));
+        $this->saveNotificationAutomationRules($filtered);
+
+        return back()->with('success', 'Notification automation rule removed.');
+    }
+
     public function runOpsAction(Request $request): RedirectResponse
     {
         $this->assertCan($request, 'manage settings', 'Only authorized admins can run maintenance actions.');
@@ -1071,6 +1171,13 @@ class SettingsController extends Controller
                 'migrate_status',
                 'fix_permissions',
                 'clear_logs',
+                'sync_permissions',
+                'schedule_list',
+                'schedule_run',
+                'queue_restart',
+                'queue_work_once',
+                'queue_failed',
+                'queue_flush',
             ])],
         ]);
 
@@ -1081,6 +1188,13 @@ class SettingsController extends Controller
             'migrate_status' => $this->runShell('php artisan migrate:status --no-ansi', 90),
             'fix_permissions' => $this->runShell('chmod -R 0777 storage bootstrap/cache public/uploads && chmod 0666 .env && chmod +x artisan server.php index.php', 30),
             'clear_logs' => $this->clearApplicationLogs(),
+            'sync_permissions' => $this->runShell('php artisan haarray:permissions:sync --seed-admins --no-ansi', 90),
+            'schedule_list' => $this->runShell('php artisan schedule:list --no-ansi', 90),
+            'schedule_run' => $this->runShell('php artisan schedule:run --no-ansi', 120),
+            'queue_restart' => $this->runShell('php artisan queue:restart --no-ansi', 60),
+            'queue_work_once' => $this->runShell('php artisan queue:work --stop-when-empty --tries=1 --timeout=90 --no-ansi', 180),
+            'queue_failed' => $this->runShell('php artisan queue:failed --no-ansi', 60),
+            'queue_flush' => $this->runShell('php artisan queue:flush --no-ansi', 60),
             default => ['ok' => false, 'exit_code' => 1, 'output' => 'Invalid action.'],
         };
 
@@ -1202,6 +1316,13 @@ class SettingsController extends Controller
                 'type'     => 'bool',
                 'required' => true,
                 'default'  => 'false',
+            ],
+            'HAARRAY_HOT_RELOAD' => [
+                'section'  => 'app',
+                'label'    => 'Enable Dev Hot Reload (local only)',
+                'type'     => 'bool',
+                'required' => true,
+                'default'  => 'true',
             ],
             'APP_TIMEZONE' => [
                 'section'  => 'app',
@@ -2294,5 +2415,86 @@ class SettingsController extends Controller
                 'savings_rate' => max(0.05, min(0.95, $savingsTarget)),
             ],
         ];
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function notificationAutomationRules(): array
+    {
+        $raw = trim((string) AppSettings::get('notifications.automation_rules_json', ''));
+        if ($raw === '') {
+            return [];
+        }
+
+        try {
+            $decoded = json_decode($raw, true, flags: JSON_THROW_ON_ERROR);
+            return is_array($decoded) ? array_values($decoded) : [];
+        } catch (Throwable) {
+            return [];
+        }
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function notificationAutomationModelOptions(): array
+    {
+        return [
+            'activity' => 'Request / CRUD Activity',
+        ];
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $rules
+     */
+    private function saveNotificationAutomationRules(array $rules): void
+    {
+        $normalized = [];
+        foreach ($rules as $rule) {
+            if (!is_array($rule)) {
+                continue;
+            }
+            $id = trim((string) ($rule['id'] ?? ''));
+            if ($id === '') {
+                continue;
+            }
+
+            $normalized[] = [
+                'id' => $id,
+                'active' => (bool) ($rule['active'] ?? false),
+                'model_key' => trim((string) ($rule['model_key'] ?? 'activity')) ?: 'activity',
+                'event_name' => trim((string) ($rule['event_name'] ?? 'activity.request')) ?: 'activity.request',
+                'methods' => array_values(array_unique(array_filter(array_map(
+                    fn ($item) => strtoupper(trim((string) $item)),
+                    (array) ($rule['methods'] ?? [])
+                )))),
+                'route_patterns' => array_values(array_filter(array_map(
+                    fn ($item) => trim((string) $item),
+                    (array) ($rule['route_patterns'] ?? [])
+                ))),
+                'title_template' => trim((string) ($rule['title_template'] ?? '')),
+                'message_template' => trim((string) ($rule['message_template'] ?? '')),
+                'level' => in_array((string) ($rule['level'] ?? 'info'), ['info', 'success', 'warning', 'error'], true)
+                    ? (string) $rule['level']
+                    : 'info',
+                'channels' => array_values(array_unique(array_filter(array_map(
+                    fn ($item) => trim((string) $item),
+                    (array) ($rule['channels'] ?? ['in_app'])
+                ), fn ($item) => in_array($item, ['in_app', 'telegram'], true)))),
+                'throttle_seconds' => max(10, min((int) ($rule['throttle_seconds'] ?? 60), 3600)),
+                'audience' => [
+                    'type' => in_array((string) data_get($rule, 'audience.type', 'admins'), ['admins', 'all', 'role', 'users'], true)
+                        ? (string) data_get($rule, 'audience.type')
+                        : 'admins',
+                    'role' => trim((string) data_get($rule, 'audience.role', '')),
+                    'user_ids' => array_values(array_map('intval', (array) data_get($rule, 'audience.user_ids', []))),
+                ],
+            ];
+        }
+
+        AppSettings::putMany([
+            'notifications.automation_rules_json' => json_encode($normalized, JSON_UNESCAPED_SLASHES),
+        ]);
     }
 }
