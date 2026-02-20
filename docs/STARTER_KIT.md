@@ -255,3 +255,24 @@ document.addEventListener('hspa:error', (event) => {
 chmod -R 0777 storage bootstrap/cache public/uploads
 chmod 0666 .env
 ```
+
+## 11. Sidebar, profile, notifications
+
+- Desktop sidebar supports compact mode and persists state in localStorage.
+- Mobile sidebar uses hamburger + overlay behavior.
+- Sidebar user menu includes profile modal (`POST /profile`) for name/email/password/notification preference updates.
+- Notification tray supports:
+  - click row to open + mark read
+  - per-row mark-read icon
+  - mark-all-read action
+  - optional custom notification sound (`ui.notification_sound_url` in app settings)
+
+## 12. Global search and media manager
+
+- Topbar search (`⌘K` / `Ctrl+K`) uses `GET /ui/search/global`.
+- Default registry lives in `config/haarray.php -> global_search`.
+- Admins can override model registry JSON in Settings > App & Branding (`search.registry_json`).
+- Topbar media library modal uses:
+  - `GET /ui/file-manager` (image/audio list)
+  - `POST /ui/file-manager/upload` (image/audio upload)
+- Any input can receive picked URLs with `data-media-manager-open data-media-target="input-id"`.

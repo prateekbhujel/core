@@ -33,6 +33,7 @@
       this.$cancel = this.$modal.find('[data-h-confirm-cancel]');
       this.$close = this.$modal.find('[data-h-confirm-close]');
       this.current = null;
+      this.pending = false;
 
       $(document).on('click', 'a[data-confirm="true"]', (event) => {
         const $anchor = $(event.currentTarget);
@@ -94,6 +95,9 @@
       this.$text.text(text);
       this.$ok.text(okText);
       this.$cancel.text(cancelText);
+      this.pending = false;
+      this.$ok.prop('disabled', false);
+      this.$cancel.prop('disabled', false);
       this.$modal.addClass('show').attr('aria-hidden', 'false');
       $('body').css('overflow', 'hidden');
     },
@@ -103,6 +107,9 @@
       this.$modal.removeClass('show').attr('aria-hidden', 'true');
       $('body').css('overflow', '');
       this.current = null;
+      this.pending = false;
+      this.$ok.prop('disabled', false);
+      this.$cancel.prop('disabled', false);
     },
 
     _doConfirm() {
@@ -110,12 +117,20 @@
         this.close();
         return;
       }
+      if (this.pending) return;
+
+      this.pending = true;
+      this.$ok.prop('disabled', true);
+      this.$cancel.prop('disabled', true);
 
       if (this.current.type === 'link') {
         const method = this.current.method;
         const href = this.current.href;
 
         if (!href) {
+          this.pending = false;
+          this.$ok.prop('disabled', false);
+          this.$cancel.prop('disabled', false);
           this.close();
           return;
         }
@@ -633,6 +648,18 @@
           lengthMenu: 'Show _MENU_ rows',
           emptyTable: 'No records found.',
         },
+        initComplete: function () {
+          const $container = $(this.api().table().container());
+          const $length = $container.find('div.dataTables_length select');
+          const $search = $container.find('div.dataTables_filter input');
+          $length.addClass('form-select form-select-sm').attr('aria-label', 'Rows per page');
+          $search.addClass('form-control form-control-sm').attr('aria-label', 'Search table');
+        },
+        drawCallback: function () {
+          const $container = $(this.api().table().container());
+          $container.find('div.dataTables_length select').addClass('form-select form-select-sm');
+          $container.find('div.dataTables_filter input').addClass('form-control form-control-sm');
+        },
       };
 
       if (endpoint) {
@@ -656,7 +683,18 @@
       $table.find('thead th[data-col]').each((_, th) => {
         const key = String($(th).data('col') || '').trim();
         if (!key) return;
-        columns.push({ data: key, name: key });
+        const className = String(th.className || '').trim();
+        const rawOrderable = String($(th).data('orderable') ?? '').trim().toLowerCase();
+        const rawSearchable = String($(th).data('searchable') ?? '').trim().toLowerCase();
+        const orderable = rawOrderable === '' ? true : !['false', '0', 'no'].includes(rawOrderable);
+        const searchable = rawSearchable === '' ? true : !['false', '0', 'no'].includes(rawSearchable);
+        columns.push({
+          data: key,
+          name: key,
+          className,
+          orderable,
+          searchable,
+        });
       });
 
       return columns;
@@ -812,9 +850,17 @@
       editorEl.dataset.editorToolbarId = this._editorId(editorEl);
       toolbar.dataset.editorToolbar = editorEl.dataset.editorToolbarId;
 
+      toolbar.addEventListener('mousedown', (event) => {
+        if (event.target.closest('[data-cmd],select[data-cmd]')) {
+          event.preventDefault();
+        }
+      });
+
       toolbar.addEventListener('click', (event) => {
         const button = event.target.closest('[data-cmd]');
         if (!button) return;
+        event.preventDefault();
+        event.stopPropagation();
 
         const cmd = button.dataset.cmd;
         const arg = button.dataset.arg || null;
@@ -826,6 +872,8 @@
       toolbar.addEventListener('change', (event) => {
         const select = event.target.closest('select[data-cmd]');
         if (!select) return;
+        event.preventDefault();
+        event.stopPropagation();
         editorEl.focus();
         this._execCommand(editorEl, String(select.dataset.cmd || ''), String(select.value || 'p'));
       });

@@ -38,10 +38,15 @@
   /* ── SIDEBAR ──────────────────────────────────────────── */
   const HSidebar = {
     storageKey: 'h_nav_group_state',
+    compactStorageKey: 'h_sidebar_compact',
 
     init() {
       $(document).on('click', '.h-menu-toggle', () => this.toggle());
       $(document).on('click', '.h-sidebar-overlay', () => this.close());
+      $(document).on('click', '[data-sidebar-collapse-toggle]', (event) => {
+        event.preventDefault();
+        this.toggleCompact();
+      });
       $(document).on('click', '.h-nav-item, .h-nav-sub-item', (event) => {
         if ($(window).width() > 768) return;
         if ($(event.currentTarget).is('[data-nav-toggle]')) return;
@@ -56,7 +61,17 @@
       });
 
       this.restoreGroupState();
+      this.restoreCompactState();
       this.syncGroups();
+      this._syncCompactToggleIcon();
+
+      $(window).on('resize', () => {
+        if ($(window).width() <= 768) {
+          this.applyCompact(false, false);
+        } else {
+          this.restoreCompactState();
+        }
+      });
     },
 
     toggle() {
@@ -73,6 +88,41 @@
       $('#h-sidebar').removeClass('open');
       $('.h-sidebar-overlay').removeClass('show');
       $('body').css('overflow', '');
+    },
+
+    toggleCompact() {
+      if ($(window).width() <= 768) {
+        this.toggle();
+        return;
+      }
+
+      const isCollapsed = $('body').hasClass('h-sidebar-compact');
+      this.applyCompact(!isCollapsed);
+    },
+
+    applyCompact(compact, persist = true) {
+      const shouldCompact = compact === true && $(window).width() > 768;
+      $('body').toggleClass('h-sidebar-compact', shouldCompact);
+      this._syncCompactToggleIcon();
+
+      if (!persist) return;
+      try {
+        localStorage.setItem(this.compactStorageKey, shouldCompact ? '1' : '0');
+      } catch (error) {
+        // Ignore storage errors.
+      }
+    },
+
+    restoreCompactState() {
+      if ($(window).width() <= 768) return;
+
+      let compact = false;
+      try {
+        compact = localStorage.getItem(this.compactStorageKey) === '1';
+      } catch (error) {
+        compact = false;
+      }
+      this.applyCompact(compact, false);
     },
 
     toggleGroup(key) {
@@ -144,6 +194,17 @@
       } catch (error) {
         // Ignore storage errors.
       }
+    },
+
+    _syncCompactToggleIcon() {
+      const button = document.querySelector('[data-sidebar-collapse-toggle]');
+      if (!button) return;
+      const isCollapsed = document.body.classList.contains('h-sidebar-compact');
+      button.setAttribute('title', isCollapsed ? 'Expand sidebar' : 'Collapse sidebar');
+      button.setAttribute('aria-label', isCollapsed ? 'Expand sidebar' : 'Collapse sidebar');
+      button.innerHTML = isCollapsed
+        ? '<i class="fa-solid fa-angles-right"></i>'
+        : '<i class="fa-solid fa-angles-left"></i>';
     },
   };
 
@@ -296,7 +357,21 @@
         this.refresh(false);
       });
 
+      $(document).on('click', '[data-notif-mark-all]', (event) => {
+        event.preventDefault();
+        this.markAllRead();
+      });
+
+      $(document).on('click', '[data-notif-mark-read]', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const id = String($(event.currentTarget).data('notifMarkRead') || '').trim();
+        if (!id) return;
+        this.markRead(id);
+      });
+
       $(document).on('click', '.h-notif-item[data-notif-id]', (event) => {
+        if ($(event.target).closest('[data-notif-mark-read]').length) return;
         const itemEl = event.currentTarget;
         const id = itemEl.getAttribute('data-notif-id');
         if (!id) return;
@@ -405,6 +480,11 @@
                 ${message ? `<div class="h-notif-item-meta">${message}</div>` : ''}
                 <div class="h-notif-item-time">${time}</div>
               </div>
+              ${isUnread ? `
+                <button type="button" class="h-notif-read-btn" data-notif-mark-read="${this._escape(item.id || '')}" title="Mark as read" aria-label="Mark as read">
+                  <i class="fa-solid fa-check"></i>
+                </button>
+              ` : ''}
             </div>
           `;
         })
@@ -425,6 +505,25 @@
         $item.removeClass('is-unread');
         this.refresh(true);
       });
+    },
+
+    markAllRead() {
+      const endpoint = String($('body').data('notificationReadAllUrl') || '').trim();
+      if (!endpoint || !window.HApi) return;
+
+      HApi.post(endpoint)
+        .done((payload) => {
+          const marked = Number(payload && payload.marked ? payload.marked : 0);
+          if (marked > 0) {
+            HToast.success('Marked ' + marked + ' notification(s) as read.');
+          } else {
+            HToast.info('No unread notifications.');
+          }
+          this.refresh(true);
+        })
+        .fail(() => {
+          HToast.error('Unable to mark notifications as read.');
+        });
     },
 
     _updateBell(unreadCount) {
@@ -515,6 +614,26 @@
     },
 
     _playBeep() {
+      const customSoundUrl = String($('body').data('notificationSoundUrl') || '').trim();
+      if (customSoundUrl !== '') {
+        try {
+          if (!this._soundPlayer || this._soundPlayer.src !== customSoundUrl) {
+            this._soundPlayer = new Audio(customSoundUrl);
+          }
+          this._soundPlayer.currentTime = 0;
+          this._soundPlayer.volume = 0.65;
+          this._soundPlayer.play().catch(() => {
+            this._playOscillatorBeep();
+          });
+          return;
+        } catch (error) {
+          // Fall through to oscillator beep.
+        }
+      }
+      this._playOscillatorBeep();
+    },
+
+    _playOscillatorBeep() {
       try {
         const AudioContextClass = window.AudioContext || window.webkitAudioContext;
         if (typeof AudioContextClass !== 'function') return;
@@ -548,6 +667,304 @@
       } catch (error) {
         // Ignore autoplay or audio context restrictions.
       }
+    },
+
+    _escape(input) {
+      return String(input ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    },
+  };
+
+  /* ── GLOBAL SEARCH ──────────────────────────────────── */
+  const HSearch = {
+    _timer: null,
+
+    init() {
+      if (!$('#h-global-search-modal').length) return;
+
+      $(document).on('click', '[data-global-search-open]', (event) => {
+        event.preventDefault();
+        this.open();
+      });
+
+      $(document).on('keydown', (event) => {
+        const isCombo = (event.metaKey || event.ctrlKey) && String(event.key || '').toLowerCase() === 'k';
+        if (!isCombo) return;
+        event.preventDefault();
+        this.open();
+      });
+
+      $(document).on('input', '#h-global-search-input', (event) => {
+        const query = String(event.currentTarget.value || '').trim();
+        window.clearTimeout(this._timer);
+        this._timer = window.setTimeout(() => this.search(query), 180);
+      });
+
+      $(document).on('click', '[data-search-open-url]', (event) => {
+        event.preventDefault();
+        const url = String($(event.currentTarget).data('searchOpenUrl') || '').trim();
+        if (!url) return;
+
+        HModal.close('h-global-search-modal');
+        if (window.HSPA && HUtils.isSameOrigin(url)) {
+          HSPA.navigate(url, true);
+          return;
+        }
+        window.location.href = url;
+      });
+    },
+
+    open() {
+      HModal.open('h-global-search-modal');
+      const input = document.getElementById('h-global-search-input');
+      if (!input) return;
+      setTimeout(() => input.focus(), 40);
+      if (!String(input.value || '').trim()) {
+        this.render([]);
+      }
+    },
+
+    search(query) {
+      if (!query || query.length < 2) {
+        this.render([]);
+        return;
+      }
+
+      const endpoint = String($('body').data('globalSearchUrl') || '').trim();
+      if (!endpoint || !window.HApi) return;
+
+      HApi.get(endpoint, { q: query, limit: 20, per_source: 8 })
+        .done((payload) => {
+          const items = Array.isArray(payload.items) ? payload.items : [];
+          this.render(items);
+        })
+        .fail(() => {
+          this.render([]);
+          HToast.error('Search failed. Please try again.');
+        });
+    },
+
+    render(items) {
+      const $list = $('#h-global-search-results');
+      if (!$list.length) return;
+
+      if (!Array.isArray(items) || items.length === 0) {
+        $list.html('<div class="h-notif-empty"><i class="fa-solid fa-magnifying-glass"></i><span>No results yet.</span></div>');
+        return;
+      }
+
+      const rows = items.map((item) => {
+        const title = this._escape(item.title || 'Result');
+        const subtitle = this._escape(item.subtitle || '');
+        const url = this._escape(item.url || '');
+        const icon = this._escape(item.icon || 'fa-solid fa-file-lines');
+
+        return `
+          <button type="button" class="h-search-row" data-search-open-url="${url}">
+            <span class="h-search-row-icon"><i class="${icon}"></i></span>
+            <span class="h-search-row-copy">
+              <span class="h-search-row-title">${title}</span>
+              ${subtitle ? `<span class="h-search-row-sub">${subtitle}</span>` : ''}
+            </span>
+            <span class="h-search-row-arrow"><i class="fa-solid fa-arrow-up-right-from-square"></i></span>
+          </button>
+        `;
+      }).join('');
+
+      $list.html(rows);
+    },
+
+    _escape(input) {
+      return String(input ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    },
+  };
+
+  /* ── MEDIA MANAGER ──────────────────────────────────── */
+  const HMediaManager = {
+    _targetInputId: '',
+    _query: '',
+    _searchTimer: null,
+
+    init() {
+      if (!$('#h-media-manager-modal').length) return;
+
+      $(document).on('click', '[data-media-manager-open]', (event) => {
+        event.preventDefault();
+        this._targetInputId = String($(event.currentTarget).data('mediaTarget') || '').trim();
+        this.open();
+      });
+
+      $(document).on('input', '#h-media-manager-search', (event) => {
+        this._query = String(event.currentTarget.value || '').trim();
+        window.clearTimeout(this._searchTimer);
+        this._searchTimer = window.setTimeout(() => this.load(), 170);
+      });
+
+      $(document).on('click', '#h-media-manager-upload', (event) => {
+        event.preventDefault();
+        this.upload();
+      });
+
+      $(document).on('click', '[data-media-pick-url]', (event) => {
+        event.preventDefault();
+        const url = String($(event.currentTarget).data('mediaPickUrl') || '').trim();
+        if (!url) return;
+        this.applySelection(url);
+      });
+    },
+
+    open() {
+      this._syncTargetNote();
+      HModal.open('h-media-manager-modal');
+      this.load();
+    },
+
+    load() {
+      const endpoint = String(document.body.dataset.fileManagerListUrl || '').trim();
+      const grid = document.getElementById('h-media-manager-grid');
+      if (!endpoint || !grid || !window.HApi) return;
+
+      grid.innerHTML = '<div class="h-notif-empty"><i class="fa-solid fa-spinner fa-spin"></i><span>Loading media...</span></div>';
+      HApi.get(endpoint, { q: this._query, limit: 160 })
+        .done((payload) => {
+          const items = Array.isArray(payload.items) ? payload.items : [];
+          this.render(items);
+        })
+        .fail(() => {
+          grid.innerHTML = '<div class="h-notif-empty"><i class="fa-regular fa-circle-xmark"></i><span>Unable to load media.</span></div>';
+        });
+    },
+
+    render(items) {
+      const grid = document.getElementById('h-media-manager-grid');
+      if (!grid) return;
+
+      if (!Array.isArray(items) || items.length === 0) {
+        grid.innerHTML = '<div class="h-notif-empty"><i class="fa-regular fa-folder-open"></i><span>No files found.</span></div>';
+        return;
+      }
+
+      const rows = items.map((item) => {
+        const url = this._escape(item.url || '');
+        const name = this._escape(item.name || 'file');
+        const type = String(item.type || 'file');
+        const extension = this._escape(item.extension || '');
+        const size = this._escape(item.size_kb || '');
+        const modified = this._escape(item.modified_at || '');
+
+        let preview = '<div class="h-media-file-icon"><i class="fa-regular fa-file"></i></div>';
+        if (type === 'image') {
+          preview = `<img src="${url}" alt="${name}" loading="lazy">`;
+        } else if (type === 'audio') {
+          preview = `
+            <div class="h-media-audio-preview">
+              <i class="fa-solid fa-wave-square"></i>
+              <audio controls preload="none" src="${url}"></audio>
+            </div>
+          `;
+        }
+
+        return `
+          <article class="h-media-browser-card" data-type="${this._escape(type)}">
+            <div class="h-media-browser-preview">${preview}</div>
+            <div class="h-media-browser-meta">
+              <div class="h-media-browser-name" title="${name}">${name}</div>
+              <div class="h-media-browser-sub">${extension.toUpperCase()} • ${size} KB • ${modified}</div>
+            </div>
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-media-pick-url="${url}">
+              <i class="fa-solid fa-check me-1"></i>Use
+            </button>
+          </article>
+        `;
+      }).join('');
+
+      grid.innerHTML = rows;
+    },
+
+    upload() {
+      const endpoint = String(document.body.dataset.fileManagerUploadUrl || '').trim();
+      const fileInput = document.getElementById('h-media-manager-file');
+      if (!endpoint || !fileInput || !(fileInput instanceof HTMLInputElement)) return;
+
+      const file = fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
+      if (!file) {
+        HToast.warning('Choose a file first.');
+        return;
+      }
+
+      const token = String((document.querySelector('meta[name="csrf-token"]') || {}).content || '');
+      const data = new FormData();
+      data.append('file', file);
+      data.append('folder', 'library');
+
+      $.ajax({
+        url: endpoint,
+        method: 'POST',
+        data,
+        processData: false,
+        contentType: false,
+        headers: token ? { 'X-CSRF-TOKEN': token } : {},
+      }).done((payload) => {
+        const item = payload && payload.item ? payload.item : null;
+        fileInput.value = '';
+        this.load();
+        if (item && item.url && this._targetInputId) {
+          this.applySelection(String(item.url));
+        } else {
+          HToast.success('Media uploaded.');
+        }
+      }).fail((xhr) => {
+        const message = xhr && xhr.responseJSON && xhr.responseJSON.message
+          ? xhr.responseJSON.message
+          : 'Upload failed.';
+        HToast.error(message);
+      });
+    },
+
+    applySelection(url) {
+      if (!this._targetInputId) {
+        if (navigator && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+          navigator.clipboard.writeText(url)
+            .then(() => HToast.success('Media URL copied to clipboard.'))
+            .catch(() => HToast.info('Media selected.'));
+        } else {
+          HToast.info('Media selected.');
+        }
+        return;
+      }
+
+      const input = document.getElementById(this._targetInputId);
+      if (!input || !('value' in input)) {
+        HToast.warning('Target input not found for selected media.');
+        return;
+      }
+
+      input.value = url;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      HToast.success('Media selected.');
+      HModal.close('h-media-manager-modal');
+    },
+
+    _syncTargetNote() {
+      const note = document.getElementById('h-media-manager-target-note');
+      if (!note) return;
+      if (!this._targetInputId) {
+        note.hidden = true;
+        note.textContent = '';
+        return;
+      }
+      note.hidden = false;
+      note.textContent = 'Selecting file for #' + this._targetInputId + '. Click "Use" to insert.';
     },
 
     _escape(input) {
@@ -1297,8 +1714,11 @@
         'iconSpriteUrl',
         'fileManagerListUrl',
         'fileManagerUploadUrl',
+        'globalSearchUrl',
         'faviconUrl',
         'themeColor',
+        'notificationReadAllUrl',
+        'notificationSoundUrl',
       ];
 
       keys.forEach((key) => {
@@ -1448,6 +1868,8 @@
     HSidebar.init();
     HToast.init();
     HModal.init();
+    HSearch.init();
+    HMediaManager.init();
     HNotify.init();
     HPWA.init();
     HDebug.init();
@@ -1461,6 +1883,8 @@
     window.HSidebar = HSidebar;
     window.HToast = HToast;
     window.HModal = HModal;
+    window.HSearch = HSearch;
+    window.HMediaManager = HMediaManager;
     window.HNotify = HNotify;
     window.HPWA = HPWA;
     window.HDebug = HDebug;
@@ -1506,6 +1930,7 @@
       this.$cancel = this.$modal.find('[data-h-confirm-cancel]');
       this.$close = this.$modal.find('[data-h-confirm-close]');
       this.current = null;
+      this.pending = false;
 
       $(document).on('click', 'a[data-confirm="true"]', (event) => {
         const $anchor = $(event.currentTarget);
@@ -1567,6 +1992,9 @@
       this.$text.text(text);
       this.$ok.text(okText);
       this.$cancel.text(cancelText);
+      this.pending = false;
+      this.$ok.prop('disabled', false);
+      this.$cancel.prop('disabled', false);
       this.$modal.addClass('show').attr('aria-hidden', 'false');
       $('body').css('overflow', 'hidden');
     },
@@ -1576,6 +2004,9 @@
       this.$modal.removeClass('show').attr('aria-hidden', 'true');
       $('body').css('overflow', '');
       this.current = null;
+      this.pending = false;
+      this.$ok.prop('disabled', false);
+      this.$cancel.prop('disabled', false);
     },
 
     _doConfirm() {
@@ -1583,12 +2014,20 @@
         this.close();
         return;
       }
+      if (this.pending) return;
+
+      this.pending = true;
+      this.$ok.prop('disabled', true);
+      this.$cancel.prop('disabled', true);
 
       if (this.current.type === 'link') {
         const method = this.current.method;
         const href = this.current.href;
 
         if (!href) {
+          this.pending = false;
+          this.$ok.prop('disabled', false);
+          this.$cancel.prop('disabled', false);
           this.close();
           return;
         }
@@ -2106,6 +2545,18 @@
           lengthMenu: 'Show _MENU_ rows',
           emptyTable: 'No records found.',
         },
+        initComplete: function () {
+          const $container = $(this.api().table().container());
+          const $length = $container.find('div.dataTables_length select');
+          const $search = $container.find('div.dataTables_filter input');
+          $length.addClass('form-select form-select-sm').attr('aria-label', 'Rows per page');
+          $search.addClass('form-control form-control-sm').attr('aria-label', 'Search table');
+        },
+        drawCallback: function () {
+          const $container = $(this.api().table().container());
+          $container.find('div.dataTables_length select').addClass('form-select form-select-sm');
+          $container.find('div.dataTables_filter input').addClass('form-control form-control-sm');
+        },
       };
 
       if (endpoint) {
@@ -2129,7 +2580,18 @@
       $table.find('thead th[data-col]').each((_, th) => {
         const key = String($(th).data('col') || '').trim();
         if (!key) return;
-        columns.push({ data: key, name: key });
+        const className = String(th.className || '').trim();
+        const rawOrderable = String($(th).data('orderable') ?? '').trim().toLowerCase();
+        const rawSearchable = String($(th).data('searchable') ?? '').trim().toLowerCase();
+        const orderable = rawOrderable === '' ? true : !['false', '0', 'no'].includes(rawOrderable);
+        const searchable = rawSearchable === '' ? true : !['false', '0', 'no'].includes(rawSearchable);
+        columns.push({
+          data: key,
+          name: key,
+          className,
+          orderable,
+          searchable,
+        });
       });
 
       return columns;
@@ -2285,9 +2747,17 @@
       editorEl.dataset.editorToolbarId = this._editorId(editorEl);
       toolbar.dataset.editorToolbar = editorEl.dataset.editorToolbarId;
 
+      toolbar.addEventListener('mousedown', (event) => {
+        if (event.target.closest('[data-cmd],select[data-cmd]')) {
+          event.preventDefault();
+        }
+      });
+
       toolbar.addEventListener('click', (event) => {
         const button = event.target.closest('[data-cmd]');
         if (!button) return;
+        event.preventDefault();
+        event.stopPropagation();
 
         const cmd = button.dataset.cmd;
         const arg = button.dataset.arg || null;
@@ -2299,6 +2769,8 @@
       toolbar.addEventListener('change', (event) => {
         const select = event.target.closest('select[data-cmd]');
         if (!select) return;
+        event.preventDefault();
+        event.stopPropagation();
         editorEl.focus();
         this._execCommand(editorEl, String(select.dataset.cmd || ''), String(select.value || 'p'));
       });

@@ -34,6 +34,8 @@ class SettingsController extends Controller
         $dbConnectionInfo = $this->databaseConnectionInfo();
         $uiBranding = AppSettings::uiBranding();
         $mediaLibrary = $this->brandingMediaLibrary();
+        $notificationSoundUrl = AppSettings::resolveUiAsset(AppSettings::get('ui.notification_sound_url', ''));
+        $searchRegistryJson = AppSettings::get('search.registry_json', '');
 
         $fields = $this->fields();
         $values = $this->readEnvValues(array_keys($fields));
@@ -69,6 +71,8 @@ class SettingsController extends Controller
             'dbConnectionInfo' => $dbConnectionInfo,
             'uiBranding' => $uiBranding,
             'mediaLibrary' => $mediaLibrary,
+            'notificationSoundUrl' => $notificationSoundUrl,
+            'searchRegistryJson' => $searchRegistryJson,
         ]);
     }
 
@@ -474,14 +478,19 @@ class SettingsController extends Controller
             'ui_logo_url' => ['nullable', 'string', 'max:2048'],
             'ui_favicon_url' => ['nullable', 'string', 'max:2048'],
             'ui_app_icon_url' => ['nullable', 'string', 'max:2048'],
+            'ui_notification_sound_url' => ['nullable', 'string', 'max:2048'],
             'ui_logo_file' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,svg', 'max:4096'],
             'ui_favicon_file' => ['nullable', 'file', 'mimes:ico,png,webp,svg', 'max:2048'],
             'ui_app_icon_file' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,svg,ico', 'max:4096'],
+            'ui_notification_sound_file' => ['nullable', 'file', 'mimes:mp3,wav,ogg,m4a,aac,flac', 'max:15360'],
+            'search_registry_json' => ['nullable', 'string', 'max:30000'],
         ]);
 
         $logoUrl = $this->normalizeUiAssetInput((string) ($validated['ui_logo_url'] ?? ''));
         $faviconUrl = $this->normalizeUiAssetInput((string) ($validated['ui_favicon_url'] ?? ''));
         $appIconUrl = $this->normalizeUiAssetInput((string) ($validated['ui_app_icon_url'] ?? ''));
+        $notificationSoundUrl = $this->normalizeUiAssetInput((string) ($validated['ui_notification_sound_url'] ?? ''));
+        $searchRegistryJson = trim((string) ($validated['search_registry_json'] ?? ''));
 
         if ($request->hasFile('ui_logo_file')) {
             $logoUrl = $this->storeBrandAsset($request->file('ui_logo_file'), 'logo');
@@ -495,6 +504,21 @@ class SettingsController extends Controller
             $appIconUrl = $this->storeBrandAsset($request->file('ui_app_icon_file'), 'app-icon');
         }
 
+        if ($request->hasFile('ui_notification_sound_file')) {
+            $notificationSoundUrl = $this->storeBrandAsset($request->file('ui_notification_sound_file'), 'notification-sound');
+        }
+
+        if ($searchRegistryJson !== '') {
+            try {
+                $decoded = json_decode($searchRegistryJson, true, flags: JSON_THROW_ON_ERROR);
+                if (!is_array($decoded)) {
+                    return back()->with('error', 'Search registry JSON must decode into an array.');
+                }
+            } catch (Throwable $exception) {
+                return back()->with('error', 'Search registry JSON is invalid: ' . $exception->getMessage());
+            }
+        }
+
         AppSettings::putMany([
             'ui.display_name' => trim((string) $validated['ui_display_name']),
             'ui.brand_subtitle' => trim((string) ($validated['ui_brand_subtitle'] ?? '')),
@@ -503,6 +527,8 @@ class SettingsController extends Controller
             'ui.logo_url' => $logoUrl,
             'ui.favicon_url' => $faviconUrl,
             'ui.app_icon_url' => $appIconUrl,
+            'ui.notification_sound_url' => $notificationSoundUrl,
+            'search.registry_json' => $searchRegistryJson,
         ]);
 
         return back()->with('success', 'Branding and asset settings updated successfully.');
@@ -541,6 +567,9 @@ class SettingsController extends Controller
         }
         if (ltrim((string) ($branding['app_icon_url'] ?? ''), '/') === $relativePath) {
             $updates['ui.app_icon_url'] = '';
+        }
+        if (ltrim((string) $this->normalizeUiAssetInput(AppSettings::get('ui.notification_sound_url', '')), '/') === $relativePath) {
+            $updates['ui.notification_sound_url'] = '';
         }
 
         if (!empty($updates)) {
@@ -920,6 +949,37 @@ class SettingsController extends Controller
         return back()->with('success', 'Your security and notification preferences were updated.');
     }
 
+    public function updateProfile(Request $request): RedirectResponse
+    {
+        $user = $request->user();
+        if (!$user) {
+            abort(403);
+        }
+
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:120'],
+            'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
+            'password' => ['nullable', 'string', 'min:8', 'confirmed'],
+            'telegram_chat_id' => ['nullable', 'string', 'max:255'],
+            'browser_notifications_enabled' => ['nullable', 'boolean'],
+        ]);
+
+        $payload = [
+            'name' => trim((string) $validated['name']),
+            'email' => strtolower(trim((string) $validated['email'])),
+            'telegram_chat_id' => trim((string) ($validated['telegram_chat_id'] ?? '')) ?: null,
+            'browser_notifications_enabled' => (bool) $request->boolean('browser_notifications_enabled', false),
+        ];
+
+        if (!empty($validated['password'])) {
+            $payload['password'] = (string) $validated['password'];
+        }
+
+        $user->update($payload);
+
+        return back()->with('success', 'Profile updated successfully.');
+    }
+
     public function runOpsAction(Request $request): RedirectResponse
     {
         $this->assertCan($request, 'manage settings', 'Only authorized admins can run maintenance actions.');
@@ -933,6 +993,7 @@ class SettingsController extends Controller
                 'optimize_clear',
                 'migrate_status',
                 'fix_permissions',
+                'clear_logs',
             ])],
         ]);
 
@@ -942,6 +1003,7 @@ class SettingsController extends Controller
             'optimize_clear' => $this->runShell('php artisan optimize:clear', 90),
             'migrate_status' => $this->runShell('php artisan migrate:status --no-ansi', 90),
             'fix_permissions' => $this->runShell('chmod -R 0777 storage bootstrap/cache public/uploads && chmod 0666 .env && chmod +x artisan server.php index.php', 30),
+            'clear_logs' => $this->clearApplicationLogs(),
             default => ['ok' => false, 'exit_code' => 1, 'output' => 'Invalid action.'],
         };
 
@@ -1937,6 +1999,45 @@ class SettingsController extends Controller
 
         $tail = array_slice($allLines, -1 * max(20, $lines));
         return trim(implode(PHP_EOL, $tail));
+    }
+
+    /**
+     * @return array{ok:bool, exit_code:int, output:string}
+     */
+    private function clearApplicationLogs(): array
+    {
+        $logDirectory = storage_path('logs');
+
+        try {
+            File::ensureDirectoryExists($logDirectory, 0775, true);
+            $logFiles = File::files($logDirectory);
+            $cleared = 0;
+
+            foreach ($logFiles as $file) {
+                if (!str_ends_with((string) $file->getFilename(), '.log')) {
+                    continue;
+                }
+                File::put((string) $file->getPathname(), '');
+                $cleared++;
+            }
+
+            if ($cleared === 0) {
+                File::put(storage_path('logs/laravel.log'), '');
+                $cleared = 1;
+            }
+
+            return [
+                'ok' => true,
+                'exit_code' => 0,
+                'output' => 'Cleared ' . $cleared . ' log file(s).',
+            ];
+        } catch (Throwable $exception) {
+            return [
+                'ok' => false,
+                'exit_code' => 1,
+                'output' => $exception->getMessage(),
+            ];
+        }
     }
 
     private function storeBrandAsset(UploadedFile $file, string $kind): string

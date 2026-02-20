@@ -101,6 +101,17 @@ document.addEventListener('hspa:afterSwap', (event) =&gt; {
           <li>Use Blade components (<code>&lt;x-icon&gt;</code>, <code>&lt;x-select&gt;</code>, <code>&lt;x-editor&gt;</code>) for consistent scaffolding.</li>
         </ol>
       </section>
+
+      <section class="doc-block">
+        <h3>Build a CRUD Page (Starter Pattern)</h3>
+        <ol>
+          <li>Create route pair: list page + DataTable JSON endpoint.</li>
+          <li>Render list first with <code>table[data-h-datatable]</code> and sticky action column.</li>
+          <li>Use one reusable modal form for create/edit and bind row actions with icon buttons.</li>
+          <li>Add <code>data-confirm="true"</code> for delete forms so deletion only runs after confirmation.</li>
+          <li>Rehydrate plugins automatically after SPA navigation via <code>hspa:afterSwap</code>.</li>
+        </ol>
+      </section>
     </div>
 
     <div class="h-tab-panel" data-tab-panel="docs-ui">
@@ -309,6 +320,12 @@ document.addEventListener('hspa:afterSwap', (event) =&gt; {
     &lt;/tr&gt;
   &lt;/thead&gt;
 &lt;/table&gt;</code></pre>
+
+        <pre><code>// Controller
+return DataTables::eloquent(User::query())
+  ->addColumn('actions', fn ($row) =&gt; '&lt;button class="btn btn-outline-secondary btn-sm h-action-icon"&gt;...&lt;/button&gt;')
+  ->rawColumns(['actions'])
+  -&gt;toJson();</code></pre>
       </section>
 
       <section class="doc-block">
@@ -363,6 +380,29 @@ document.addEventListener('hspa:afterSwap', (event) =&gt; {
             Demo Confirm Link
           </a>
         </div>
+      </section>
+
+      <section class="doc-block">
+        <h3>Global Search + Media Manager</h3>
+        <p>
+          The topbar ships with a global search modal (<code>⌘K / Ctrl+K</code>) and a full media manager.
+          Search reads from <code>config('haarray.global_search')</code> and can be overridden from Settings JSON registry.
+        </p>
+        <pre><code>// Example dynamic source (Settings → App & Branding JSON)
+[
+  {
+    "key": "invoice",
+    "model": "App\\\\Models\\\\Invoice",
+    "id": "id",
+    "title": "invoice_no",
+    "subtitle": "client_name",
+    "search": ["invoice_no", "client_name"],
+    "route": "invoices.show",
+    "route_params": {"invoice": "{id}"},
+    "permission": "view invoices",
+    "icon": "fa-solid fa-file-invoice"
+  }
+]</code></pre>
       </section>
     </div>
 

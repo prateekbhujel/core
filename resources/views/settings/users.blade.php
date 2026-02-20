@@ -51,7 +51,7 @@
     <div class="body">
       <div class="table-responsive">
         <table
-          class="table table-sm table-striped table-hover align-middle"
+          class="table table-sm table-striped table-hover align-middle h-table-sticky-actions"
           data-h-datatable
           data-endpoint="{{ route('ui.datatables.users') }}"
           data-page-length="10"
@@ -67,7 +67,7 @@
               <th data-col="role">Role</th>
               <th data-col="channels">Channels</th>
               <th data-col="created_at">Joined</th>
-              <th data-col="actions">Action</th>
+              <th data-col="actions" class="h-col-actions" data-orderable="false" data-searchable="false">Action</th>
             </tr>
           </thead>
           <tbody></tbody>

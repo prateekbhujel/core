@@ -17,6 +17,8 @@
   $logoUrl = (string) ($uiBranding['logo_url'] ?? '');
   $faviconUrl = (string) ($uiBranding['favicon_url'] ?? '');
   $appIconUrl = (string) ($uiBranding['app_icon_url'] ?? '');
+  $notificationSoundValue = (string) ($notificationSoundUrl ?? '');
+  $searchRegistryValue = (string) ($searchRegistryJson ?? '');
   $dbLabel = ($dbConnectionInfo['database'] ?? '') !== '' ? (string) $dbConnectionInfo['database'] : 'n/a';
   $mlDefaults = (array) ($mlDiagnostics['probe_defaults'] ?? []);
 @endphp
@@ -84,6 +86,24 @@
                   <label class="h-label" style="display:block;">App Icon URL</label>
                   <input type="text" name="ui_app_icon_url" id="ui-app-icon-url" class="form-control" value="{{ old('ui_app_icon_url', $appIconUrl) }}" placeholder="https://.../app-icon.png">
                 </div>
+                <div class="col-md-8">
+                  <label class="h-label" style="display:block;">Notification Sound URL</label>
+                  <div class="input-group">
+                    <input type="text" name="ui_notification_sound_url" id="ui-notification-sound-url" class="form-control" value="{{ old('ui_notification_sound_url', $notificationSoundValue) }}" placeholder="https://.../notify.mp3">
+                    <button type="button" class="btn btn-outline-secondary" data-media-manager-open data-media-target="ui-notification-sound-url">
+                      <i class="fa-solid fa-photo-film me-1"></i>
+                      Library
+                    </button>
+                  </div>
+                  <div class="h-muted mt-1" style="font-size:11px;">Used by browser/in-app notification attention sound.</div>
+                  @if(trim($notificationSoundValue) !== '')
+                    <audio controls preload="none" class="mt-2 w-100" src="{{ $notificationSoundValue }}"></audio>
+                  @endif
+                </div>
+                <div class="col-md-4">
+                  <label class="h-label" style="display:block;">Upload Notification Sound</label>
+                  <input type="file" name="ui_notification_sound_file" class="form-control" accept=".mp3,.wav,.ogg,.m4a,.aac,.flac,audio/*">
+                </div>
 
                 <div class="col-md-4">
                   <label class="h-label" style="display:block;">Upload Logo</label>
@@ -109,6 +129,11 @@
                     <span class="h-file-copy">Drop app icon here or click to browse</span>
                   </label>
                 </div>
+                <div class="col-12">
+                  <label class="h-label" style="display:block;">Global Search Registry (JSON override)</label>
+                  <textarea name="search_registry_json" class="form-control" rows="6" placeholder='[{"key":"invoice","model":"App\\\\Models\\\\Invoice","id":"id","title":"invoice_no","subtitle":"client_name","search":["invoice_no","client_name"],"route":"invoices.show","route_params":{"invoice":"{id}"},"permission":"view invoices","icon":"fa-solid fa-file-invoice"}]'>{{ old('search_registry_json', $searchRegistryValue) }}</textarea>
+                  <div class="h-muted mt-1" style="font-size:11px;">Optional. Leave blank to use default registry from <code>config/haarray.php</code>.</div>
+                </div>
               </div>
 
               <div class="h-note mt-3">
@@ -126,9 +151,15 @@
         </div>
 
         <div class="h-card-soft mb-3">
-          <div class="head">
-            <div style="font-family:var(--fd);font-size:16px;font-weight:700;">Media Library</div>
-            <div class="h-muted" style="font-size:13px;">Click any asset below to apply as logo, favicon, or app icon.</div>
+          <div class="head h-split">
+            <div>
+              <div style="font-family:var(--fd);font-size:16px;font-weight:700;">Media Library</div>
+              <div class="h-muted" style="font-size:13px;">Click any asset below to apply as logo, favicon, app icon, or sound URL.</div>
+            </div>
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-media-manager-open>
+              <i class="fa-solid fa-folder-open me-2"></i>
+              Open Full Library
+            </button>
           </div>
           <div class="body">
             @if(empty($mediaLibrary))
@@ -146,6 +177,7 @@
                       <button type="button" class="btn btn-outline-secondary btn-sm" data-media-pick data-media-target="ui-logo-url" data-media-url="{{ $asset['url'] }}">Logo</button>
                       <button type="button" class="btn btn-outline-secondary btn-sm" data-media-pick data-media-target="ui-favicon-url" data-media-url="{{ $asset['url'] }}">Favicon</button>
                       <button type="button" class="btn btn-outline-secondary btn-sm" data-media-pick data-media-target="ui-app-icon-url" data-media-url="{{ $asset['url'] }}">App Icon</button>
+                      <button type="button" class="btn btn-outline-secondary btn-sm" data-media-pick data-media-target="ui-notification-sound-url" data-media-url="{{ $asset['url'] }}">Sound URL</button>
                       <form method="POST" action="{{ route('settings.branding.media.delete') }}" data-spa data-confirm="true" data-confirm-title="Delete media?" data-confirm-text="This media file will be removed permanently.">
                         @csrf
                         @method('DELETE')
@@ -307,7 +339,7 @@
                 </div>
               </div>
 
-              <div class="h-note mt-3">Browser alerts trigger sound + vibration where supported when new unread notifications arrive.</div>
+              <div class="h-note mt-3">Unread alerts can be marked from tray. Sound + vibration is triggered when new notifications arrive (custom sound from App & Branding if configured).</div>
 
               <div class="d-flex justify-content-end mt-3">
                 <button type="submit" class="btn btn-primary" data-busy-text="Sending...">
@@ -476,7 +508,19 @@
         </div>
 
         <div class="h-card-soft mb-3">
-          <div class="head"><div style="font-family:var(--fd);font-size:16px;font-weight:700;">Recent Logs</div></div>
+          <div class="head h-split">
+            <div style="font-family:var(--fd);font-size:16px;font-weight:700;">Recent Logs</div>
+            @if($opsUiEnabled)
+              <form method="POST" action="{{ route('settings.ops.action') }}" data-spa data-confirm="true" data-confirm-title="Clear logs?" data-confirm-text="This will truncate current log files.">
+                @csrf
+                <input type="hidden" name="action" value="clear_logs">
+                <button type="submit" class="btn btn-outline-danger btn-sm">
+                  <i class="fa-solid fa-trash me-1"></i>
+                  Clear Logs
+                </button>
+              </form>
+            @endif
+          </div>
           <div class="body"><pre style="margin:0;max-height:300px;overflow:auto;white-space:pre-wrap;color:var(--t1);font-family:var(--fm);font-size:11px;">{{ $opsSnapshot['log_tail'] ?? 'No log data available.' }}</pre></div>
         </div>
       </div>

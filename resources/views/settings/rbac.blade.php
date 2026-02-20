@@ -36,7 +36,7 @@
       <div class="body">
         <div class="table-responsive">
           <table
-            class="table table-sm align-middle"
+            class="table table-sm align-middle h-table-sticky-actions"
             data-h-datatable
             data-endpoint="{{ route('ui.datatables.roles') }}"
             data-page-length="10"
@@ -51,7 +51,7 @@
                 <th data-col="permissions_count">Permissions</th>
                 <th data-col="users_count">Users</th>
                 <th data-col="is_protected">Protected</th>
-                <th data-col="actions">Action</th>
+                <th data-col="actions" class="h-col-actions" data-orderable="false" data-searchable="false">Action</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -159,8 +159,8 @@
                         <form method="POST" action="{{ route('settings.roles.delete', $roleRow['id']) }}" data-spa data-confirm="true" data-confirm-title="Delete role?" data-confirm-text="Role will be removed permanently if no user is assigned.">
                           @csrf
                           @method('DELETE')
-                          <button type="submit" class="btn btn-outline-danger btn-sm" @disabled($isProtected || ((int) $roleRow['users_count']) > 0)>
-                            Delete
+                          <button type="submit" class="btn btn-outline-danger btn-sm h-action-icon" title="Delete role" @disabled($isProtected || ((int) $roleRow['users_count']) > 0)>
+                            <i class="fa-solid fa-trash"></i>
                           </button>
                         </form>
                       </td>

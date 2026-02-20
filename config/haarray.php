@@ -102,6 +102,78 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Global Search Registry
+    |--------------------------------------------------------------------------
+    | Models can be overridden at runtime via app_settings.search.registry_json.
+    */
+    'global_search' => [
+        'links' => [
+            [
+                'title' => 'Dashboard',
+                'subtitle' => 'Financial snapshot and widgets',
+                'route' => 'dashboard',
+                'permission' => 'view dashboard',
+                'icon' => 'fa-solid fa-gauge-high',
+            ],
+            [
+                'title' => 'Starter Docs',
+                'subtitle' => 'Components and integration guides',
+                'route' => 'docs.index',
+                'permission' => 'view docs',
+                'icon' => 'fa-solid fa-book-open',
+            ],
+            [
+                'title' => 'Settings',
+                'subtitle' => 'Application control panel',
+                'route' => 'settings.index',
+                'permission' => 'view settings',
+                'icon' => 'fa-solid fa-sliders',
+            ],
+            [
+                'title' => 'Users',
+                'subtitle' => 'User directory and access',
+                'route' => 'settings.users.index',
+                'permission' => 'view users',
+                'icon' => 'fa-solid fa-users',
+            ],
+            [
+                'title' => 'Roles & Access',
+                'subtitle' => 'RBAC role matrix',
+                'route' => 'settings.rbac',
+                'permission' => 'manage settings',
+                'icon' => 'fa-solid fa-user-lock',
+            ],
+        ],
+        'models' => [
+            [
+                'key' => 'user',
+                'model' => \App\Models\User::class,
+                'id' => 'id',
+                'title' => 'name',
+                'subtitle' => 'email',
+                'search' => ['name', 'email'],
+                'route' => 'settings.users.index',
+                'query' => 'edit_user={id}',
+                'permission' => 'view users',
+                'icon' => 'fa-solid fa-user',
+            ],
+            [
+                'key' => 'activity',
+                'model' => \App\Models\UserActivity::class,
+                'id' => 'id',
+                'title' => 'path',
+                'subtitle' => 'route_name',
+                'search' => ['path', 'route_name', 'method'],
+                'route' => 'settings.index',
+                'query' => 'tab=settings-activity',
+                'permission' => 'view settings',
+                'icon' => 'fa-solid fa-chart-line',
+            ],
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | App Routes (for sidebar active state)
     |--------------------------------------------------------------------------
     */

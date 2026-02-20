@@ -68,6 +68,29 @@ class NotificationController extends Controller
         return response()->json(['ok' => true]);
     }
 
+    public function markAllRead(Request $request): JsonResponse
+    {
+        if (!Schema::hasTable('notifications')) {
+            return response()->json(['ok' => false, 'message' => 'Notifications table is missing.'], 404);
+        }
+
+        $user = $request->user();
+        if (!$user) {
+            return response()->json(['ok' => false, 'message' => 'Unauthenticated.'], 401);
+        }
+
+        $unread = $user->unreadNotifications()->get();
+        $count = $unread->count();
+        if ($count > 0) {
+            $unread->markAsRead();
+        }
+
+        return response()->json([
+            'ok' => true,
+            'marked' => $count,
+        ]);
+    }
+
     public function broadcast(Request $request, TelegramNotificationService $telegram): RedirectResponse
     {
         $actor = $request->user();

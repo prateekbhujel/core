@@ -61,6 +61,9 @@ Route::middleware('auth')->group(function () {
         ->middleware('permission:view settings')
         ->name('settings.security');
 
+    Route::post('/profile', [SettingsController::class, 'updateProfile'])
+        ->name('profile.update');
+
     Route::post('/settings/users/{user}/access', [SettingsController::class, 'updateUserAccess'])
         ->middleware('permission:manage users')
         ->name('settings.users.access');
@@ -130,6 +133,9 @@ Route::middleware('auth')->group(function () {
         ->middleware('permission:manage settings')
         ->name('ui.filemanager.upload');
 
+    Route::get('/ui/search/global', [UiOptionsController::class, 'globalSearch'])
+        ->name('ui.search.global');
+
     Route::get('/ui/datatables/users', [UiOptionsController::class, 'usersTable'])
         ->middleware('permission:view users')
         ->name('ui.datatables.users');
@@ -149,6 +155,10 @@ Route::middleware('auth')->group(function () {
     Route::post('/notifications/{id}/read', [NotificationController::class, 'markRead'])
         ->middleware('permission:view notifications')
         ->name('notifications.read');
+
+    Route::post('/notifications/read-all', [NotificationController::class, 'markAllRead'])
+        ->middleware('permission:view notifications')
+        ->name('notifications.read_all');
 
     Route::post('/notifications/broadcast', [NotificationController::class, 'broadcast'])
         ->middleware('permission:manage notifications')

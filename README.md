@@ -14,18 +14,23 @@ Laravel starter kit for Haarray products with progressive SPA behavior, reusable
 - Yajra DataTables + server-side table endpoints
 - Bootstrap + Font Awesome integration (open source)
 - Dedicated sidebar docs + Settings control center
+- Collapsible/expandable desktop sidebar + mobile hamburger sidebar
 - Settings tabs for app-level controls: App & Branding, Activity, Security, Notifications, System, Diagnostics
 - Dedicated full pages for `Users` and `Access & RBAC` from sidebar
 - Built-in media/file manager endpoint for editor and branding uploads
+- Global media manager modal (image/audio) with upload and picker support
+- Global search modal (`⌘K` / `Ctrl+K`) with config-driven + DB-backed results
 - Editor tools now use modal UI (link/image/table) instead of browser prompts
 - Built-in debug console tray for client errors + SPA failures
 - Sidebar settings entries are configurable in `config/menu.php`
 - UI-based `.env` settings editor for whitelisted keys
 - Optional PWA install flow (manifest + service worker + install prompt)
 - Settings app-branding panel with DB-backed app name/logo/favicon/app icon/theme color
+- Profile modal from sidebar user menu (name/email/password/telegram/browser notify)
 - Activity tab with Yajra DataTable + export
 - Diagnostics tabs with DB browser/log/ML checks/user activity visibility
 - Collapsible sidebar settings group with query-aware tab links + dedicated Users/RBAC links
+- Notification tray actions: per-row mark-read + mark-all-read + optional custom audio
 
 ## Tech profile
 
@@ -92,11 +97,14 @@ Served bundle:
 - `public/js/haarray.app.js`
 
 - `HTheme`: dark/light mode state
+- `HSidebar`: mobile toggle + desktop compact mode persistence
 - `HToast`: notifications
 - `HModal`: modal controls
 - `HApi`: AJAX/form helper
 - `HSPA`: partial navigation + lifecycle events
 - `HDebug`: debug console tray + client error capture
+- `HSearch`: global search overlay
+- `HMediaManager`: global media browser/upload/picker
 
 - `HConfirm`: confirmation flow for links/forms
 - `HSelect`: searchable single/multi select

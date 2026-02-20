@@ -7,6 +7,7 @@
     $brandFavicon = \App\Support\AppSettings::resolveUiAsset((string) ($uiBranding['favicon_url'] ?? ''));
     $brandLogo = \App\Support\AppSettings::resolveUiAsset((string) ($uiBranding['logo_url'] ?? ''));
     $brandAppIcon = \App\Support\AppSettings::resolveUiAsset((string) ($uiBranding['app_icon_url'] ?? ''));
+    $brandNotificationSound = \App\Support\AppSettings::resolveUiAsset(\App\Support\AppSettings::get('ui.notification_sound_url', ''));
     $themeColor = trim((string) ($uiBranding['theme_color'] ?? '#2f7df6'));
     if (!preg_match('/^#[0-9a-fA-F]{6}$/', $themeColor)) {
       $themeColor = '#2f7df6';
@@ -54,8 +55,8 @@
   @yield('styles')
 </head>
 <body
-  data-notifications-feed-url="{{ route('notifications.feed') }}"
-  data-notification-read-url-template="{{ route('notifications.read', ['id' => '__ID__']) }}"
+  data-notifications-feed-url="{{ auth()->user()->can('view notifications') ? route('notifications.feed') : '' }}"
+  data-notification-read-url-template="{{ auth()->user()->can('view notifications') ? route('notifications.read', ['id' => '__ID__']) : '' }}"
   data-notifications-poll-seconds="{{ (int) config('haarray.realtime.poll_seconds', 20) }}"
   data-browser-notify-enabled="{{ auth()->user()->browser_notifications_enabled ? '1' : '0' }}"
   data-pwa-enabled="{{ config('haarray.enable_pwa') ? '1' : '0' }}"
@@ -64,7 +65,10 @@
   data-favicon-url="{{ $brandFavicon !== '' ? $brandFavicon : asset('favicon.ico') }}"
   data-file-manager-list-url="{{ route('ui.filemanager.index') }}"
   data-file-manager-upload-url="{{ route('ui.filemanager.upload') }}"
+  data-global-search-url="{{ route('ui.search.global') }}"
   data-theme-color="{{ $themeColor }}"
+  data-notification-read-all-url="{{ auth()->user()->can('view notifications') ? route('notifications.read_all') : '' }}"
+  data-notification-sound-url="{{ $brandNotificationSound }}"
 >
 
 {{-- Sidebar overlay (mobile) --}}
@@ -89,6 +93,9 @@
       <div class="h-brand-name">{{ $brandDisplayName }}</div>
       <div class="h-brand-sub">{{ $brandSubtitle }}</div>
     </div>
+    <button type="button" class="h-sidebar-collapse-btn" data-sidebar-collapse-toggle aria-label="Collapse sidebar" title="Collapse sidebar">
+      <i class="fa-solid fa-angles-left"></i>
+    </button>
   </div>
 
   <div class="h-sidebar-nav" id="h-sidebar-nav">
@@ -234,15 +241,25 @@
       <div id="h-topbar-extra">
         @yield('topbar_extra')
       </div>
+      <button class="h-icon-btn" type="button" title="Search (⌘K / Ctrl+K)" data-global-search-open aria-label="Global Search">
+        <i class="fa-solid fa-magnifying-glass"></i>
+      </button>
+      @can('view settings')
+        <button class="h-icon-btn" type="button" title="Media Library" data-media-manager-open aria-label="Media Library">
+          <i class="fa-solid fa-photo-film"></i>
+        </button>
+      @endcan
       @if(config('haarray.enable_pwa'))
         <button class="h-icon-btn" type="button" id="h-pwa-install" title="Install app" style="display:none;">
           <i class="fa-solid fa-download"></i>
         </button>
       @endif
-      <button class="h-icon-btn h-notif-toggle" type="button" title="Notifications" data-notif-toggle aria-label="Notifications">
-        <i class="fa-solid fa-bell"></i>
-        <span class="h-notif-dot is-hidden"></span>
-      </button>
+      @can('view notifications')
+        <button class="h-icon-btn h-notif-toggle" type="button" title="Notifications" data-notif-toggle aria-label="Notifications">
+          <i class="fa-solid fa-bell"></i>
+          <span class="h-notif-dot is-hidden"></span>
+        </button>
+      @endcan
       <button class="h-icon-btn" type="button" title="Debug Console" data-debug-toggle aria-label="Debug Console">
         <i class="fa-solid fa-bug"></i>
       </button>
@@ -271,27 +288,32 @@
 
 </div>
 
-{{-- Notification Tray --}}
-<div class="h-notif-tray" id="h-notif-tray" aria-hidden="true">
-  <div class="h-notif-head">
-    <div>
-      <div class="h-notif-title">Notifications</div>
-      <div class="h-notif-sub">System alerts and updates</div>
+@can('view notifications')
+  {{-- Notification Tray --}}
+  <div class="h-notif-tray" id="h-notif-tray" aria-hidden="true">
+    <div class="h-notif-head">
+      <div>
+        <div class="h-notif-title">Notifications</div>
+        <div class="h-notif-sub">System alerts and updates</div>
+      </div>
+      <div class="h-row" style="gap:6px;">
+        <button type="button" class="h-icon-btn" data-notif-mark-all aria-label="Mark all as read" title="Mark all read">
+          <i class="fa-solid fa-check-double"></i>
+        </button>
+        <button type="button" class="h-icon-btn" data-notif-refresh aria-label="Refresh notifications" title="Refresh">
+          <i class="fa-solid fa-rotate"></i>
+        </button>
+        <button type="button" class="h-modal-close" data-notif-close aria-label="Close notifications">×</button>
+      </div>
     </div>
-    <div class="h-row" style="gap:6px;">
-      <button type="button" class="h-icon-btn" data-notif-refresh aria-label="Refresh notifications" title="Refresh">
-        <i class="fa-solid fa-rotate"></i>
-      </button>
-      <button type="button" class="h-modal-close" data-notif-close aria-label="Close notifications">×</button>
+    <div class="h-notif-list" id="h-notif-list">
+      <div class="h-notif-empty">
+        <i class="fa-regular fa-bell-slash"></i>
+        <span>No notifications yet.</span>
+      </div>
     </div>
   </div>
-  <div class="h-notif-list" id="h-notif-list">
-    <div class="h-notif-empty">
-      <i class="fa-regular fa-bell-slash"></i>
-      <span>No notifications yet.</span>
-    </div>
-  </div>
-</div>
+@endcan
 
 {{-- Debug Tray --}}
 <div class="h-debug-tray" id="h-debug-tray" aria-hidden="true">
@@ -324,6 +346,10 @@
     </div>
     <div class="h-modal-body">
       <p style="font-size:13px;color:var(--t2);margin-bottom:18px;">{{ auth()->user()->email }}</p>
+      <button type="button" class="btn btn-outline-secondary w-100 mb-2" data-modal-open="user-profile-modal" data-modal-close>
+        <i class="fa-solid fa-user-gear me-2"></i>
+        Profile Settings
+      </button>
       <form action="{{ route('logout') }}" method="POST">
         @csrf
         <button type="submit" class="h-btn danger full">
@@ -331,6 +357,97 @@
           Sign Out
         </button>
       </form>
+    </div>
+  </div>
+</div>
+
+{{-- Profile modal --}}
+<div class="h-modal-overlay" id="user-profile-modal">
+  <div class="h-modal" style="max-width:560px;">
+    <div class="h-modal-head">
+      <div class="h-modal-title">Profile Settings</div>
+      <button class="h-modal-close">×</button>
+    </div>
+    <div class="h-modal-body">
+      <form method="POST" action="{{ route('profile.update') }}" data-spa>
+        @csrf
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="h-label" style="display:block;">Name</label>
+            <input type="text" name="name" class="form-control" value="{{ old('name', auth()->user()->name) }}" required>
+          </div>
+          <div class="col-md-6">
+            <label class="h-label" style="display:block;">Email</label>
+            <input type="email" name="email" class="form-control" value="{{ old('email', auth()->user()->email) }}" required>
+          </div>
+          <div class="col-md-6">
+            <label class="h-label" style="display:block;">Telegram Chat ID</label>
+            <input type="text" name="telegram_chat_id" class="form-control" value="{{ old('telegram_chat_id', auth()->user()->telegram_chat_id) }}" placeholder="optional">
+          </div>
+          <div class="col-md-6">
+            <label class="h-label" style="display:block;">Browser Notifications</label>
+            <select name="browser_notifications_enabled" class="form-select" data-h-select>
+              <option value="1" @selected(old('browser_notifications_enabled', auth()->user()->browser_notifications_enabled ? '1' : '0') === '1')>On</option>
+              <option value="0" @selected(old('browser_notifications_enabled', auth()->user()->browser_notifications_enabled ? '1' : '0') === '0')>Off</option>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="h-label" style="display:block;">New Password</label>
+            <input type="password" name="password" class="form-control" minlength="8" autocomplete="new-password" placeholder="Leave blank to keep current">
+          </div>
+          <div class="col-md-6">
+            <label class="h-label" style="display:block;">Confirm Password</label>
+            <input type="password" name="password_confirmation" class="form-control" minlength="8" autocomplete="new-password" placeholder="Confirm password">
+          </div>
+        </div>
+        <div class="d-flex justify-content-end mt-3">
+          <button type="submit" class="btn btn-primary" data-busy-text="Saving...">
+            <i class="fa-solid fa-floppy-disk me-2"></i>
+            Save Profile
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{{-- Global search modal --}}
+<div class="h-modal-overlay" id="h-global-search-modal">
+  <div class="h-modal h-search-modal">
+    <div class="h-modal-head">
+      <div class="h-modal-title">Global Search</div>
+      <button class="h-modal-close">×</button>
+    </div>
+    <div class="h-modal-body">
+      <div class="h-search-headline">Press <code>⌘K</code> / <code>Ctrl+K</code> to open quickly</div>
+      <input type="text" id="h-global-search-input" class="form-control" placeholder="Search users, docs, settings, activities...">
+      <div class="h-global-search-results" id="h-global-search-results">
+        <div class="h-notif-empty"><i class="fa-solid fa-magnifying-glass"></i><span>Start typing to search.</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{{-- Global media library modal --}}
+<div class="h-modal-overlay" id="h-media-manager-modal">
+  <div class="h-modal h-media-manager-modal">
+    <div class="h-modal-head">
+      <div class="h-modal-title">Media Library</div>
+      <button class="h-modal-close">×</button>
+    </div>
+    <div class="h-modal-body">
+      <div class="h-media-manager-head">
+        <input type="text" class="form-control form-control-sm" id="h-media-manager-search" placeholder="Search media files...">
+        <input type="file" class="form-control form-control-sm" id="h-media-manager-file" accept=".jpg,.jpeg,.png,.webp,.gif,.svg,.ico,.mp3,.wav,.ogg,.m4a,.aac,.flac,image/*,audio/*">
+        <button type="button" class="btn btn-sm btn-primary" id="h-media-manager-upload">
+          <i class="fa-solid fa-upload me-1"></i>
+          Upload
+        </button>
+      </div>
+      <div class="h-note mt-2 mb-2" id="h-media-manager-target-note" hidden></div>
+      <div class="h-media-manager-grid" id="h-media-manager-grid">
+        <div class="h-notif-empty"><i class="fa-regular fa-folder-open"></i><span>No media loaded.</span></div>
+      </div>
     </div>
   </div>
 </div>
