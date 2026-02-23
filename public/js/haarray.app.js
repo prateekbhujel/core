@@ -734,9 +734,15 @@
   /* ── GLOBAL SEARCH ──────────────────────────────────── */
   const HSearch = {
     _timer: null,
+    _debounceMs: 180,
 
     init() {
       if (!$('#h-global-search-modal').length) return;
+
+      const configuredDebounce = Number($('body').data('globalSearchDebounce') || 180);
+      this._debounceMs = Number.isFinite(configuredDebounce)
+        ? Math.max(80, Math.min(configuredDebounce, 1500))
+        : 180;
 
       $(document).on('click', '[data-global-search-open]', (event) => {
         event.preventDefault();
@@ -753,7 +759,7 @@
       $(document).on('input', '#h-global-search-input', (event) => {
         const query = String(event.currentTarget.value || '').trim();
         window.clearTimeout(this._timer);
-        this._timer = window.setTimeout(() => this.search(query), 180);
+        this._timer = window.setTimeout(() => this.search(query), this._debounceMs);
       });
 
       $(document).on('click', '[data-search-open-url]', (event) => {
@@ -1996,6 +2002,7 @@
         'fileManagerExportUrl',
         'fileManagerResizeUrl',
         'globalSearchUrl',
+        'globalSearchDebounce',
         'faviconUrl',
         'themeColor',
         'notificationReadAllUrl',

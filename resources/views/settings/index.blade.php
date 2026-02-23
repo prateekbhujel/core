@@ -13,19 +13,25 @@
 @section('content')
 @php
   $defaultSettingsTab = (string) request()->query('tab', 'settings-app');
+  $allowedTabs = ['settings-app', 'settings-activity', 'settings-security', 'settings-notifications', 'settings-system'];
+  if (!in_array($defaultSettingsTab, $allowedTabs, true)) {
+      $defaultSettingsTab = 'settings-app';
+  }
+  if ($defaultSettingsTab === 'settings-system' && !$canManageSettings) {
+      $defaultSettingsTab = 'settings-app';
+  }
   $themeColor = (string) ($uiBranding['theme_color'] ?? '#2f7df6');
   $logoUrl = (string) ($uiBranding['logo_url'] ?? '');
   $faviconUrl = (string) ($uiBranding['favicon_url'] ?? '');
   $appIconUrl = (string) ($uiBranding['app_icon_url'] ?? '');
   $notificationSoundValue = (string) ($notificationSoundUrl ?? '');
-  $searchRegistryValue = (string) ($searchRegistryJson ?? '');
   $dbLabel = ($dbConnectionInfo['database'] ?? '') !== '' ? (string) $dbConnectionInfo['database'] : 'n/a';
 @endphp
 
 <div class="hl-docs hl-settings">
   <div class="doc-head">
     <div>
-      <div class="doc-title">Settings Control Panel</div>
+      <div class="doc-title">Settings Control Hub</div>
       <div class="doc-sub">
         Clean starter settings for branding, activity, security, notifications, and system configuration.
       </div>
@@ -35,7 +41,7 @@
 
   <div class="h-tab-shell h-settings-shell h-settings-shell--sidebar-nav" id="settings-main-tabs" data-ui-tabs data-default-tab="{{ $defaultSettingsTab }}">
     <div class="h-tab-nav" role="tablist" aria-label="Settings sections">
-      <button type="button" class="h-tab-btn" data-tab-btn="settings-app"><i class="fa-solid fa-palette"></i> App & Branding</button>
+      <button type="button" class="h-tab-btn" data-tab-btn="settings-app"><i class="fa-solid fa-palette"></i> Branding</button>
       <button type="button" class="h-tab-btn" data-tab-btn="settings-activity"><i class="fa-solid fa-chart-line"></i> Activity</button>
       <button type="button" class="h-tab-btn" data-tab-btn="settings-security"><i class="fa-solid fa-user-shield"></i> Security</button>
       <button type="button" class="h-tab-btn" data-tab-btn="settings-notifications"><i class="fa-solid fa-bell"></i> Notifications</button>
@@ -151,11 +157,6 @@
                   </div>
                 @endif
 
-                <div class="col-12">
-                  <label class="h-label" style="display:block;">Global Search Registry (JSON override)</label>
-                  <textarea name="search_registry_json" class="form-control" rows="6" placeholder='[{"key":"invoice","model":"App\\Models\\Invoice","id":"id","title":"invoice_no","subtitle":"client_name","search":["invoice_no","client_name"],"route":"invoices.show","route_params":{"invoice":"{id}"},"permission":"view invoices","icon":"fa-solid fa-file-invoice"}]'>{{ old('search_registry_json', $searchRegistryValue) }}</textarea>
-                  <div class="h-muted mt-1" style="font-size:11px;">Optional. Leave blank to use defaults from <code>config/haarray.php</code>.</div>
-                </div>
               </div>
 
               <div class="h-note mt-3">
@@ -172,29 +173,6 @@
           </div>
         </div>
 
-        <div class="h-card-soft mb-3">
-          <div class="head h-split">
-            <div>
-              <div style="font-family:var(--fd);font-size:16px;font-weight:700;">Media Library</div>
-              <div class="h-muted" style="font-size:13px;">Use dedicated folder-based media manager for upload, delete, CSV export, and image resize.</div>
-            </div>
-            <div class="h-row" style="gap:8px;">
-              <button type="button" class="btn btn-outline-secondary btn-sm" data-media-manager-open>
-                <i class="fa-solid fa-folder-open me-2"></i>
-                Quick Modal
-              </button>
-              <a href="{{ route('settings.media.index') }}" data-spa class="btn btn-primary btn-sm">
-                <i class="fa-solid fa-photo-film me-2"></i>
-                Open Media Page
-              </a>
-            </div>
-          </div>
-          <div class="body">
-            <div class="h-note">
-              Manage media from <code>Settings → Media Library</code>. It supports folder creation, CSV export, local image resize, and local/S3 fallback storage.
-            </div>
-          </div>
-        </div>
       @else
         <div class="h-note">Only users with <code>manage settings</code> can update branding.</div>
       @endif

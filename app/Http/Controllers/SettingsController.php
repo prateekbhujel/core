@@ -7,6 +7,8 @@ use App\Support\AppSettings;
 use App\Support\HealthCheckService;
 use App\Models\User;
 use App\Models\UserActivity;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -36,7 +38,6 @@ class SettingsController extends Controller
         $dbConnectionInfo = $this->databaseConnectionInfo();
         $uiBranding = AppSettings::uiBranding();
         $notificationSoundUrl = AppSettings::resolveUiAsset(AppSettings::get('ui.notification_sound_url', ''));
-        $searchRegistryJson = AppSettings::get('search.registry_json', '');
         $roleOptions = $this->availableRoleNames();
 
         $fields = $this->fields();
@@ -59,7 +60,6 @@ class SettingsController extends Controller
             'dbConnectionInfo' => $dbConnectionInfo,
             'uiBranding' => $uiBranding,
             'notificationSoundUrl' => $notificationSoundUrl,
-            'searchRegistryJson' => $searchRegistryJson,
             'roleOptions' => $roleOptions,
         ]);
     }
@@ -78,6 +78,138 @@ class SettingsController extends Controller
             'storageLabel' => $usingS3 ? ('AWS S3: ' . $s3Bucket) : 'Local /public/uploads',
             'storageDisk' => $usingS3 ? 's3' : 'public',
         ]);
+    }
+
+    public function searchIndex(Request $request): View
+    {
+        $this->assertCan($request, 'manage settings', 'Only authorized admins can manage global search.');
+
+        $entries = $this->activeSearchRegistryEntries();
+        $catalog = $this->searchCatalogEntries($entries);
+        $debounceMs = max(80, min((int) AppSettings::get('search.debounce_ms', '180'), 1500));
+
+        return view('settings.search-index', [
+            'entries' => $entries,
+            'searchCatalog' => $catalog,
+            'searchDebounceMs' => $debounceMs,
+        ]);
+    }
+
+    public function searchCreate(Request $request): View
+    {
+        $this->assertCan($request, 'manage settings', 'Only authorized admins can manage global search.');
+
+        $entries = $this->activeSearchRegistryEntries();
+        $catalog = $this->searchCatalogEntries($entries);
+
+        return view('settings.search-form', [
+            'mode' => 'create',
+            'entry' => null,
+            'searchCatalog' => $catalog,
+            'formAction' => route('settings.search.store'),
+            'formMethod' => 'POST',
+        ]);
+    }
+
+    public function searchEdit(Request $request, string $searchKey): View|RedirectResponse
+    {
+        $this->assertCan($request, 'manage settings', 'Only authorized admins can manage global search.');
+
+        $entries = $this->activeSearchRegistryEntries();
+        $entry = $this->findSearchRegistryEntry($entries, $searchKey);
+        if ($entry === null) {
+            return redirect()->route('settings.search.index')->with('error', 'Search source was not found.');
+        }
+
+        $catalog = $this->searchCatalogEntries($entries);
+
+        return view('settings.search-form', [
+            'mode' => 'edit',
+            'entry' => $entry,
+            'searchCatalog' => $catalog,
+            'formAction' => route('settings.search.update', ['searchKey' => $entry['key']]),
+            'formMethod' => 'PUT',
+        ]);
+    }
+
+    public function storeSearch(Request $request): RedirectResponse
+    {
+        $this->assertCan($request, 'manage settings', 'Only authorized admins can manage global search.');
+
+        $entries = $this->activeSearchRegistryEntries();
+        $catalog = $this->searchCatalogEntries($entries);
+        $entry = $this->searchEntryFromRequest($request, $catalog);
+        if ($entry === null) {
+            return back()->withInput();
+        }
+
+        $index = $this->findSearchRegistryEntryIndex($entries, (string) $entry['key']);
+        if ($index !== null) {
+            return back()->withInput()->with('error', 'Search key already exists. Use edit to update it.');
+        }
+
+        $entries[] = $entry;
+        $this->persistSearchRegistryEntries($entries);
+
+        return redirect()->route('settings.search.index')->with('success', 'Global search source created successfully.');
+    }
+
+    public function updateSearch(Request $request, string $searchKey): RedirectResponse
+    {
+        $this->assertCan($request, 'manage settings', 'Only authorized admins can manage global search.');
+
+        $entries = $this->activeSearchRegistryEntries();
+        $editIndex = $this->findSearchRegistryEntryIndex($entries, $searchKey);
+        if ($editIndex === null) {
+            return redirect()->route('settings.search.index')->with('error', 'Search source was not found.');
+        }
+
+        $catalog = $this->searchCatalogEntries($entries);
+        $entry = $this->searchEntryFromRequest($request, $catalog);
+        if ($entry === null) {
+            return back()->withInput();
+        }
+
+        $conflictIndex = $this->findSearchRegistryEntryIndex($entries, (string) $entry['key']);
+        if ($conflictIndex !== null && $conflictIndex !== $editIndex) {
+            return back()->withInput()->with('error', 'Search key already exists on another source.');
+        }
+
+        $entries[$editIndex] = $entry;
+        $this->persistSearchRegistryEntries($entries);
+
+        return redirect()->route('settings.search.index')->with('success', 'Global search source updated successfully.');
+    }
+
+    public function deleteSearch(Request $request, string $searchKey): RedirectResponse
+    {
+        $this->assertCan($request, 'manage settings', 'Only authorized admins can manage global search.');
+
+        $entries = $this->activeSearchRegistryEntries();
+        $index = $this->findSearchRegistryEntryIndex($entries, $searchKey);
+        if ($index === null) {
+            return back()->with('error', 'Search source was not found.');
+        }
+
+        array_splice($entries, $index, 1);
+        $this->persistSearchRegistryEntries($entries);
+
+        return back()->with('success', 'Global search source deleted successfully.');
+    }
+
+    public function updateSearchDebounce(Request $request): RedirectResponse
+    {
+        $this->assertCan($request, 'manage settings', 'Only authorized admins can manage global search.');
+
+        $validated = $request->validate([
+            'search_debounce_ms' => ['required', 'integer', 'between:80,1500'],
+        ]);
+
+        AppSettings::putMany([
+            'search.debounce_ms' => (string) $validated['search_debounce_ms'],
+        ]);
+
+        return back()->with('success', 'Global search debounce updated successfully.');
     }
 
     public function users(Request $request): View
@@ -512,25 +644,12 @@ class SettingsController extends Controller
             'ui_favicon_url' => ['nullable', 'string', 'max:2048'],
             'ui_app_icon_url' => ['nullable', 'string', 'max:2048'],
             'ui_notification_sound_url' => ['nullable', 'string', 'max:2048'],
-            'search_registry_json' => ['nullable', 'string', 'max:30000'],
         ]);
 
         $logoUrl = $this->normalizeUiAssetInput((string) ($validated['ui_logo_url'] ?? ''));
         $faviconUrl = $this->normalizeUiAssetInput((string) ($validated['ui_favicon_url'] ?? ''));
         $appIconUrl = $this->normalizeUiAssetInput((string) ($validated['ui_app_icon_url'] ?? ''));
         $notificationSoundUrl = $this->normalizeUiAssetInput((string) ($validated['ui_notification_sound_url'] ?? ''));
-        $searchRegistryJson = trim((string) ($validated['search_registry_json'] ?? ''));
-
-        if ($searchRegistryJson !== '') {
-            try {
-                $decoded = json_decode($searchRegistryJson, true, flags: JSON_THROW_ON_ERROR);
-                if (!is_array($decoded)) {
-                    return back()->with('error', 'Search registry JSON must decode into an array.');
-                }
-            } catch (Throwable $exception) {
-                return back()->with('error', 'Search registry JSON is invalid: ' . $exception->getMessage());
-            }
-        }
 
         AppSettings::putMany([
             'ui.display_name' => trim((string) $validated['ui_display_name']),
@@ -541,10 +660,90 @@ class SettingsController extends Controller
             'ui.favicon_url' => $faviconUrl,
             'ui.app_icon_url' => $appIconUrl,
             'ui.notification_sound_url' => $notificationSoundUrl,
-            'search.registry_json' => $searchRegistryJson,
         ]);
 
         return back()->with('success', 'Branding and asset settings updated successfully.');
+    }
+
+    public function updateSearchRegistry(Request $request): RedirectResponse
+    {
+        $this->assertCan($request, 'manage settings', 'Only authorized admins can change global search settings.');
+
+        $validated = $request->validate([
+            'search_registry_json' => ['nullable', 'string', 'max:120000'],
+            'search_debounce_ms' => ['nullable', 'integer', 'between:80,1500'],
+        ]);
+
+        $raw = trim((string) ($validated['search_registry_json'] ?? ''));
+        $debounceMs = (string) max(80, min((int) ($validated['search_debounce_ms'] ?? 180), 1500));
+
+        if ($raw === '') {
+            AppSettings::putMany([
+                'search.registry_json' => '',
+                'search.debounce_ms' => $debounceMs,
+            ]);
+
+            return back()->with('success', 'Global search registry reset to default config models.');
+        }
+
+        try {
+            $decoded = json_decode($raw, true, flags: JSON_THROW_ON_ERROR);
+        } catch (Throwable $exception) {
+            return back()->with('error', 'Global search JSON is invalid: ' . $exception->getMessage());
+        }
+
+        if (!is_array($decoded)) {
+            return back()->with('error', 'Global search JSON must decode into an array.');
+        }
+
+        $normalized = [];
+        foreach ($decoded as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+
+            $modelClass = trim((string) ($row['model'] ?? ''));
+            if ($modelClass === '' || !class_exists($modelClass) || !is_subclass_of($modelClass, Model::class)) {
+                return back()->with('error', "Model class {$modelClass} is invalid for search registry.");
+            }
+
+            $searchFields = array_values(array_filter(array_map(function ($field) {
+                $clean = trim((string) $field);
+                return preg_match('/^[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)?$/', $clean) === 1 ? $clean : '';
+            }, (array) ($row['search'] ?? []))));
+            if (empty($searchFields)) {
+                continue;
+            }
+
+            $idField = trim((string) ($row['id'] ?? 'id'));
+            if ($idField === '') {
+                $idField = 'id';
+            }
+            $titleField = trim((string) ($row['title'] ?? ($searchFields[0] ?? $idField)));
+            if ($titleField === '') {
+                $titleField = $idField;
+            }
+
+            $normalized[] = [
+                'key' => trim((string) ($row['key'] ?? Str::snake(class_basename($modelClass)))),
+                'model' => $modelClass,
+                'id' => $idField,
+                'title' => $titleField,
+                'subtitle' => trim((string) ($row['subtitle'] ?? '')),
+                'search' => array_values(array_unique($searchFields)),
+                'route' => trim((string) ($row['route'] ?? '')),
+                'query' => trim((string) ($row['query'] ?? '')),
+                'permission' => trim((string) ($row['permission'] ?? '')),
+                'icon' => trim((string) ($row['icon'] ?? 'fa-solid fa-magnifying-glass')),
+            ];
+        }
+
+        AppSettings::putMany([
+            'search.registry_json' => json_encode($normalized, JSON_UNESCAPED_SLASHES),
+            'search.debounce_ms' => $debounceMs,
+        ]);
+
+        return back()->with('success', 'Global search registry updated successfully.');
     }
 
     public function deleteBrandAsset(Request $request): RedirectResponse
@@ -1658,6 +1857,493 @@ class SettingsController extends Controller
                 'default'  => 'Haarray Core',
             ],
         ];
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function activeSearchRegistryEntries(): array
+    {
+        $raw = AppSettings::get('search.registry_json', '');
+        $entries = $this->resolvedSearchRegistryEntries($raw);
+
+        $normalized = [];
+        $seenKeys = [];
+        foreach ($entries as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+
+            $modelClass = trim((string) ($row['model'] ?? ''));
+            if ($modelClass === '' || !class_exists($modelClass) || !is_subclass_of($modelClass, Model::class)) {
+                continue;
+            }
+
+            $searchFields = array_values(array_unique(array_filter(array_map(function ($field) {
+                $clean = trim((string) $field);
+                return preg_match('/^[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)?$/', $clean) === 1 ? $clean : '';
+            }, (array) ($row['search'] ?? [])))));
+            if (empty($searchFields)) {
+                continue;
+            }
+
+            $baseKey = $this->normalizeSearchRegistryKey((string) ($row['key'] ?? ''), $modelClass);
+            $key = $baseKey;
+            $suffix = 2;
+            while (isset($seenKeys[strtolower($key)])) {
+                $key = $baseKey . '_' . $suffix;
+                $suffix++;
+            }
+            $seenKeys[strtolower($key)] = true;
+
+            $idField = trim((string) ($row['id'] ?? 'id'));
+            if ($idField === '') {
+                $idField = 'id';
+            }
+
+            $titleField = trim((string) ($row['title'] ?? ($searchFields[0] ?? $idField)));
+            if ($titleField === '') {
+                $titleField = $idField;
+            }
+
+            $normalized[] = [
+                'key' => $key,
+                'model' => $modelClass,
+                'id' => $idField,
+                'title' => $titleField,
+                'subtitle' => trim((string) ($row['subtitle'] ?? '')),
+                'search' => $searchFields,
+                'route' => trim((string) ($row['route'] ?? '')),
+                'query' => trim((string) ($row['query'] ?? '')),
+                'permission' => trim((string) ($row['permission'] ?? '')),
+                'icon' => trim((string) ($row['icon'] ?? 'fa-solid fa-magnifying-glass')),
+            ];
+        }
+
+        return $normalized;
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $entries
+     */
+    private function persistSearchRegistryEntries(array $entries): void
+    {
+        $encoded = json_encode(array_values($entries), JSON_UNESCAPED_SLASHES);
+        AppSettings::putMany([
+            'search.registry_json' => $encoded !== false ? $encoded : '[]',
+        ]);
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $entries
+     * @return array<string, mixed>|null
+     */
+    private function findSearchRegistryEntry(array $entries, string $key): ?array
+    {
+        $index = $this->findSearchRegistryEntryIndex($entries, $key);
+        if ($index === null) {
+            return null;
+        }
+
+        return $entries[$index] ?? null;
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $entries
+     */
+    private function findSearchRegistryEntryIndex(array $entries, string $key): ?int
+    {
+        $needle = strtolower(trim($key));
+        if ($needle === '') {
+            return null;
+        }
+
+        foreach ($entries as $index => $entry) {
+            $entryKey = strtolower(trim((string) ($entry['key'] ?? '')));
+            if ($entryKey === $needle) {
+                return $index;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $catalog
+     * @return array<string, mixed>|null
+     */
+    private function searchEntryFromRequest(Request $request, array $catalog): ?array
+    {
+        $validated = $request->validate([
+            'model' => ['required', 'string', 'max:255'],
+            'key' => ['required', 'string', 'max:120'],
+            'id' => ['required', 'string', 'max:120'],
+            'title' => ['required', 'string', 'max:120'],
+            'subtitle' => ['nullable', 'string', 'max:120'],
+            'search' => ['required', 'array', 'min:1'],
+            'search.*' => ['required', 'string', 'max:120', 'regex:/^[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)?$/'],
+            'route' => ['nullable', 'string', 'max:190'],
+            'query' => ['nullable', 'string', 'max:1900'],
+            'permission' => ['nullable', 'string', 'max:120'],
+            'icon' => ['nullable', 'string', 'max:120'],
+        ]);
+
+        $modelClass = trim((string) ($validated['model'] ?? ''));
+        $catalogItem = collect($catalog)->first(
+            fn ($row) => (string) ($row['model'] ?? '') === $modelClass
+        );
+        if (!is_array($catalogItem)) {
+            $request->session()->flash('error', 'Selected model is not available for global search.');
+            return null;
+        }
+
+        $allowedFields = $this->catalogFieldPaths($catalogItem);
+        if (empty($allowedFields)) {
+            $request->session()->flash('error', 'Selected model has no searchable fields.');
+            return null;
+        }
+        $allowedLookup = array_fill_keys($allowedFields, true);
+
+        $idField = trim((string) ($validated['id'] ?? 'id'));
+        if (!isset($allowedLookup[$idField])) {
+            $request->session()->flash('error', 'ID field must be selected from allowed model fields.');
+            return null;
+        }
+
+        $titleField = trim((string) ($validated['title'] ?? $idField));
+        if (!isset($allowedLookup[$titleField])) {
+            $request->session()->flash('error', 'Title field must be selected from allowed model fields.');
+            return null;
+        }
+
+        $subtitleField = trim((string) ($validated['subtitle'] ?? ''));
+        if ($subtitleField !== '' && !isset($allowedLookup[$subtitleField])) {
+            $request->session()->flash('error', 'Subtitle field must be selected from allowed model fields.');
+            return null;
+        }
+
+        $searchFields = array_values(array_unique(array_filter(array_map(function ($field) use ($allowedLookup) {
+            $clean = trim((string) $field);
+            if ($clean === '' || !isset($allowedLookup[$clean])) {
+                return '';
+            }
+
+            return $clean;
+        }, (array) ($validated['search'] ?? [])))));
+        if (empty($searchFields)) {
+            $request->session()->flash('error', 'Choose at least one valid searchable field.');
+            return null;
+        }
+
+        return [
+            'key' => $this->normalizeSearchRegistryKey((string) ($validated['key'] ?? ''), $modelClass),
+            'model' => $modelClass,
+            'id' => $idField,
+            'title' => $titleField,
+            'subtitle' => $subtitleField,
+            'search' => $searchFields,
+            'route' => trim((string) ($validated['route'] ?? '')),
+            'query' => trim((string) ($validated['query'] ?? '')),
+            'permission' => trim((string) ($validated['permission'] ?? '')),
+            'icon' => trim((string) ($validated['icon'] ?? 'fa-solid fa-magnifying-glass')),
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $catalogItem
+     * @return array<int, string>
+     */
+    private function catalogFieldPaths(array $catalogItem): array
+    {
+        $raw = array_merge(
+            (array) ($catalogItem['columns'] ?? []),
+            (array) ($catalogItem['relation_fields'] ?? [])
+        );
+
+        $clean = array_map(fn ($field) => trim((string) $field), $raw);
+        return array_values(array_unique(array_filter($clean, fn ($field) => $field !== '')));
+    }
+
+    private function normalizeSearchRegistryKey(string $key, string $modelClass): string
+    {
+        $clean = strtolower(trim($key));
+        $clean = preg_replace('/[^a-z0-9_-]+/', '_', $clean) ?? '';
+        $clean = trim($clean, '_-');
+        if ($clean !== '') {
+            return $clean;
+        }
+
+        return Str::snake(class_basename($modelClass));
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function resolvedSearchRegistryEntries(string $raw): array
+    {
+        $raw = trim($raw);
+        if ($raw !== '') {
+            try {
+                $decoded = json_decode($raw, true, flags: JSON_THROW_ON_ERROR);
+                if (is_array($decoded)) {
+                    return array_values(array_filter($decoded, fn ($item) => is_array($item)));
+                }
+            } catch (Throwable) {
+                // Fall back to config defaults.
+            }
+        }
+
+        $defaults = (array) config('haarray.global_search.models', []);
+        return array_values(array_filter($defaults, fn ($item) => is_array($item)));
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $activeEntries
+     * @return array<int, array<string, mixed>>
+     */
+    private function searchCatalogEntries(array $activeEntries): array
+    {
+        $defaults = (array) config('haarray.global_search.models', []);
+        $defaultEntries = array_values(array_filter($defaults, fn ($item) => is_array($item)));
+
+        $modelClasses = [];
+        foreach (array_merge($defaultEntries, $activeEntries) as $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+
+            $modelClass = trim((string) ($entry['model'] ?? ''));
+            if ($modelClass === '' || !class_exists($modelClass) || !is_subclass_of($modelClass, Model::class)) {
+                continue;
+            }
+            $modelClasses[$modelClass] = true;
+        }
+        foreach ($this->discoverSearchableModelClasses() as $modelClass) {
+            $modelClasses[$modelClass] = true;
+        }
+
+        $catalog = [];
+        foreach (array_keys($modelClasses) as $modelClass) {
+            $entry = $this->describeSearchModel($modelClass);
+            if ($entry === null) {
+                continue;
+            }
+
+            $default = collect($defaultEntries)->first(fn ($row) => (string) ($row['model'] ?? '') === $modelClass) ?? [];
+            $active = collect($activeEntries)->first(fn ($row) => (string) ($row['model'] ?? '') === $modelClass) ?? [];
+            $idField = trim((string) ($entry['id_field'] ?? 'id'));
+            $titleField = trim((string) ($entry['title_field'] ?? $idField));
+
+            $entry['defaults'] = [
+                'key' => trim((string) ($active['key'] ?? $default['key'] ?? Str::snake(class_basename($modelClass)))),
+                'id' => trim((string) ($active['id'] ?? $default['id'] ?? $idField)),
+                'title' => trim((string) ($active['title'] ?? $default['title'] ?? $titleField)),
+                'subtitle' => trim((string) ($active['subtitle'] ?? $default['subtitle'] ?? '')),
+                'route' => trim((string) ($active['route'] ?? $default['route'] ?? '')),
+                'query' => trim((string) ($active['query'] ?? $default['query'] ?? '')),
+                'permission' => trim((string) ($active['permission'] ?? $default['permission'] ?? '')),
+                'icon' => trim((string) ($active['icon'] ?? $default['icon'] ?? 'fa-solid fa-magnifying-glass')),
+                'search' => array_values(array_unique(array_filter(array_map(
+                    fn ($field) => trim((string) $field),
+                    (array) ($active['search'] ?? $default['search'] ?? [])
+                )))),
+            ];
+
+            $catalog[] = $entry;
+        }
+
+        usort($catalog, fn ($a, $b) => strcmp((string) ($a['label'] ?? ''), (string) ($b['label'] ?? '')));
+
+        return $catalog;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function discoverSearchableModelClasses(): array
+    {
+        $modelsPath = app_path('Models');
+        if (!is_dir($modelsPath)) {
+            return [];
+        }
+
+        try {
+            $files = File::allFiles($modelsPath);
+        } catch (Throwable) {
+            return [];
+        }
+
+        $classMap = [];
+        $base = rtrim(str_replace('\\', '/', $modelsPath), '/') . '/';
+
+        foreach ($files as $file) {
+            $path = str_replace('\\', '/', $file->getPathname());
+            if (!str_starts_with($path, $base) || !str_ends_with($path, '.php')) {
+                continue;
+            }
+
+            $relative = substr($path, strlen($base), -4);
+            if (!is_string($relative) || trim($relative) === '') {
+                continue;
+            }
+
+            $class = 'App\\Models\\' . str_replace('/', '\\', $relative);
+            if (!class_exists($class) || !is_subclass_of($class, Model::class)) {
+                continue;
+            }
+
+            $classMap[$class] = true;
+        }
+
+        $classes = array_keys($classMap);
+        sort($classes);
+        return $classes;
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function describeSearchModel(string $modelClass): ?array
+    {
+        if (!class_exists($modelClass) || !is_subclass_of($modelClass, Model::class)) {
+            return null;
+        }
+
+        /** @var Model $model */
+        $model = new $modelClass();
+        $table = trim((string) $model->getTable());
+        if ($table === '' || !Schema::hasTable($table)) {
+            return null;
+        }
+
+        $columns = $this->searchableColumnsForTable($table);
+        if (empty($columns)) {
+            return null;
+        }
+
+        $relations = $this->describeSearchModelRelations($model);
+        $relationFields = [];
+        foreach ($relations as $relation) {
+            foreach ((array) ($relation['columns'] ?? []) as $column) {
+                $relationFields[] = $relation['name'] . '.' . $column;
+            }
+        }
+
+        $idField = in_array('id', $columns, true) ? 'id' : (string) ($columns[0] ?? 'id');
+        $titleField = in_array('name', $columns, true)
+            ? 'name'
+            : (in_array('title', $columns, true) ? 'title' : $idField);
+        $subtitleField = in_array('email', $columns, true)
+            ? 'email'
+            : (in_array('slug', $columns, true) ? 'slug' : '');
+
+        return [
+            'model' => $modelClass,
+            'label' => class_basename($modelClass),
+            'table' => $table,
+            'columns' => $columns,
+            'relation_fields' => $relationFields,
+            'relations' => $relations,
+            'id_field' => $idField,
+            'title_field' => $titleField,
+            'subtitle_field' => $subtitleField,
+        ];
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function searchableColumnsForTable(string $table): array
+    {
+        try {
+            $columns = Schema::getColumnListing($table);
+        } catch (Throwable) {
+            return [];
+        }
+
+        $blocked = [
+            'password',
+            'remember_token',
+            'two_factor_secret',
+            'two_factor_recovery_codes',
+            'created_at',
+            'updated_at',
+            'deleted_at',
+        ];
+
+        $filtered = array_values(array_filter(array_map(
+            fn ($column) => trim((string) $column),
+            $columns
+        ), function (string $column) use ($blocked) {
+            if ($column === '' || in_array($column, $blocked, true)) {
+                return false;
+            }
+
+            return preg_match('/^[a-zA-Z0-9_]+$/', $column) === 1;
+        }));
+
+        return array_slice($filtered, 0, 30);
+    }
+
+    /**
+     * @return array<int, array{name:string,label:string,model:string,columns:array<int,string>}>
+     */
+    private function describeSearchModelRelations(Model $model): array
+    {
+        $reflection = new \ReflectionClass($model);
+        $relations = [];
+
+        foreach ($reflection->getMethods(\ReflectionMethod::IS_PUBLIC) as $method) {
+            if ($method->isStatic()) {
+                continue;
+            }
+            if ($method->getDeclaringClass()->getName() !== $reflection->getName()) {
+                continue;
+            }
+            if ($method->getNumberOfRequiredParameters() > 0) {
+                continue;
+            }
+
+            $methodName = $method->getName();
+            if (str_starts_with($methodName, 'scope') || str_starts_with($methodName, '__')) {
+                continue;
+            }
+
+            try {
+                $result = $method->invoke($model);
+            } catch (Throwable) {
+                continue;
+            }
+
+            if (!$result instanceof Relation) {
+                continue;
+            }
+
+            $relatedModel = $result->getRelated();
+            if (!$relatedModel instanceof Model) {
+                continue;
+            }
+
+            $table = trim((string) $relatedModel->getTable());
+            if ($table === '' || !Schema::hasTable($table)) {
+                continue;
+            }
+
+            $columns = $this->searchableColumnsForTable($table);
+            if (empty($columns)) {
+                continue;
+            }
+
+            $relations[] = [
+                'name' => $methodName,
+                'label' => Str::headline($methodName),
+                'model' => get_class($relatedModel),
+                'columns' => array_slice($columns, 0, 16),
+            ];
+        }
+
+        usort($relations, fn ($a, $b) => strcmp((string) ($a['name'] ?? ''), (string) ($b['name'] ?? '')));
+        return $relations;
     }
 
     /**

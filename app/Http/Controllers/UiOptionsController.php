@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Support\AppSettings;
 use App\Support\HealthCheckService;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
@@ -877,30 +878,180 @@ class UiOptionsController extends Controller
         }
 
         $columnSet = array_fill_keys($columns, true);
-        $safeFields = array_values(array_filter($searchFields, fn ($field) => isset($columnSet[$field])));
-        if (empty($safeFields) || !isset($columnSet[$idField]) || !isset($columnSet[$titleField])) {
+        $relationColumnSets = [];
+        $resolveRelation = function (string $relationName) use ($model, &$relationColumnSets): ?array {
+            $relationName = trim($relationName);
+            if ($relationName === '') {
+                return null;
+            }
+            if (array_key_exists($relationName, $relationColumnSets)) {
+                return $relationColumnSets[$relationName];
+            }
+            if (!method_exists($model, $relationName)) {
+                $relationColumnSets[$relationName] = null;
+                return null;
+            }
+
+            try {
+                $relation = $model->{$relationName}();
+            } catch (Throwable) {
+                $relationColumnSets[$relationName] = null;
+                return null;
+            }
+            if (!$relation instanceof Relation) {
+                $relationColumnSets[$relationName] = null;
+                return null;
+            }
+
+            $related = $relation->getRelated();
+            if (!$related instanceof Model) {
+                $relationColumnSets[$relationName] = null;
+                return null;
+            }
+
+            $relatedTable = trim((string) $related->getTable());
+            if ($relatedTable === '') {
+                $relationColumnSets[$relationName] = null;
+                return null;
+            }
+
+            try {
+                $relatedColumns = Schema::getColumnListing($relatedTable);
+            } catch (Throwable) {
+                $relationColumnSets[$relationName] = null;
+                return null;
+            }
+            if (empty($relatedColumns)) {
+                $relationColumnSets[$relationName] = null;
+                return null;
+            }
+
+            $relationColumnSets[$relationName] = [
+                'columns' => array_fill_keys($relatedColumns, true),
+            ];
+
+            return $relationColumnSets[$relationName];
+        };
+
+        $directSearchFields = [];
+        $relationSearchMap = [];
+        foreach ($searchFields as $field) {
+            if (!str_contains($field, '.')) {
+                if (isset($columnSet[$field])) {
+                    $directSearchFields[] = $field;
+                }
+                continue;
+            }
+
+            [$relationName, $relationColumn] = array_pad(explode('.', $field, 2), 2, '');
+            $relationName = trim($relationName);
+            $relationColumn = trim($relationColumn);
+            if ($relationName === '' || $relationColumn === '') {
+                continue;
+            }
+
+            $relationMeta = $resolveRelation($relationName);
+            if ($relationMeta === null || !isset($relationMeta['columns'][$relationColumn])) {
+                continue;
+            }
+
+            if (!isset($relationSearchMap[$relationName])) {
+                $relationSearchMap[$relationName] = [];
+            }
+            $relationSearchMap[$relationName][] = $relationColumn;
+        }
+
+        $directSearchFields = array_values(array_unique($directSearchFields));
+        foreach ($relationSearchMap as $relationName => $columnsForRelation) {
+            $relationSearchMap[$relationName] = array_values(array_unique($columnsForRelation));
+        }
+
+        if (empty($directSearchFields) && empty($relationSearchMap)) {
             return [];
         }
 
+        $idField = isset($columnSet[$idField]) ? $idField : (string) $model->getKeyName();
+        if ($idField === '' || !isset($columnSet[$idField])) {
+            return [];
+        }
+
+        $titleUsesRelation = false;
+        $titleRelationName = '';
+        $titleRelationColumn = '';
+        if (!isset($columnSet[$titleField]) && str_contains($titleField, '.')) {
+            [$titleRelationName, $titleRelationColumn] = array_pad(explode('.', $titleField, 2), 2, '');
+            $titleRelationName = trim($titleRelationName);
+            $titleRelationColumn = trim($titleRelationColumn);
+            $relationMeta = $resolveRelation($titleRelationName);
+            $titleUsesRelation = $relationMeta !== null && isset($relationMeta['columns'][$titleRelationColumn]);
+        }
+
+        if (!isset($columnSet[$titleField]) && !$titleUsesRelation) {
+            $titleField = $idField;
+            $titleUsesRelation = false;
+        }
+
+        $subtitleUsesRelation = false;
+        $subtitleRelationName = '';
+        $subtitleRelationColumn = '';
+        if ($subtitleField !== '' && !isset($columnSet[$subtitleField]) && str_contains($subtitleField, '.')) {
+            [$subtitleRelationName, $subtitleRelationColumn] = array_pad(explode('.', $subtitleField, 2), 2, '');
+            $subtitleRelationName = trim($subtitleRelationName);
+            $subtitleRelationColumn = trim($subtitleRelationColumn);
+            $relationMeta = $resolveRelation($subtitleRelationName);
+            $subtitleUsesRelation = $relationMeta !== null && isset($relationMeta['columns'][$subtitleRelationColumn]);
+        }
+
+        if ($subtitleField !== '' && !isset($columnSet[$subtitleField]) && !$subtitleUsesRelation) {
+            $subtitleField = '';
+        }
+
         $queryBuilder = $modelClass::query();
-        $queryBuilder->where(function ($builder) use ($safeFields, $query) {
-            foreach ($safeFields as $index => $field) {
-                if ($index === 0) {
+        $queryBuilder->where(function ($builder) use ($directSearchFields, $relationSearchMap, $query) {
+            $hasCondition = false;
+
+            foreach ($directSearchFields as $field) {
+                if (!$hasCondition) {
                     $builder->where($field, 'like', '%' . $query . '%');
-                    continue;
+                    $hasCondition = true;
+                } else {
+                    $builder->orWhere($field, 'like', '%' . $query . '%');
                 }
-                $builder->orWhere($field, 'like', '%' . $query . '%');
+            }
+
+            foreach ($relationSearchMap as $relationName => $columnsForRelation) {
+                $method = $hasCondition ? 'orWhereHas' : 'whereHas';
+                $builder->{$method}($relationName, function ($relationQuery) use ($columnsForRelation, $query) {
+                    foreach ($columnsForRelation as $index => $column) {
+                        if ($index === 0) {
+                            $relationQuery->where($column, 'like', '%' . $query . '%');
+                            continue;
+                        }
+                        $relationQuery->orWhere($column, 'like', '%' . $query . '%');
+                    }
+                });
+                $hasCondition = true;
             }
         });
 
         $selectColumns = array_values(array_unique(array_filter([
             $idField,
-            $titleField,
+            isset($columnSet[$titleField]) ? $titleField : null,
             $subtitleField !== '' && isset($columnSet[$subtitleField]) ? $subtitleField : null,
         ])));
-
         if (!empty($selectColumns)) {
             $queryBuilder->select($selectColumns);
+        }
+
+        $withRelations = [];
+        if ($titleUsesRelation && $titleRelationName !== '') {
+            $withRelations[] = $titleRelationName;
+        }
+        if ($subtitleUsesRelation && $subtitleRelationName !== '') {
+            $withRelations[] = $subtitleRelationName;
+        }
+        if (!empty($withRelations)) {
+            $queryBuilder->with(array_values(array_unique($withRelations)));
         }
 
         try {
@@ -909,7 +1060,7 @@ class UiOptionsController extends Controller
             return [];
         }
 
-        return $rows->map(function (Model $row) use ($titleField, $subtitleField, $source, $icon, $type) {
+        return $rows->map(function (Model $row) use ($idField, $titleField, $subtitleField, $source, $icon, $type) {
             $title = trim((string) data_get($row, $titleField));
             $subtitle = $subtitleField !== '' ? trim((string) data_get($row, $subtitleField)) : '';
             $url = $this->resolveSearchRowUrl($source, $row);
@@ -917,7 +1068,7 @@ class UiOptionsController extends Controller
                 return null;
             }
 
-            $id = (string) data_get($row, $source['id'] ?? 'id');
+            $id = (string) data_get($row, $idField);
             return [
                 'id' => $type . '-' . $id,
                 'title' => $title !== '' ? $title : ('Record #' . $id),

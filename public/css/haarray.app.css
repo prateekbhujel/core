@@ -2178,6 +2178,12 @@ body.h-sidebar-compact .h-user-card .h-user-role {
   padding: 14px;
 }
 
+.hl-settings .h-search-fields-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
 .hl-settings .h-media-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));

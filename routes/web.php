@@ -57,9 +57,44 @@ Route::middleware('auth')->group(function () {
         ->middleware('permission:manage settings')
         ->name('settings.rbac.edit');
 
+    Route::get('/settings/search', [SettingsController::class, 'searchIndex'])
+        ->middleware('permission:manage settings')
+        ->name('settings.search.index');
+
+    Route::get('/settings/search/create', [SettingsController::class, 'searchCreate'])
+        ->middleware('permission:manage settings')
+        ->name('settings.search.create');
+
+    Route::get('/settings/search/{searchKey}/edit', [SettingsController::class, 'searchEdit'])
+        ->where('searchKey', '[A-Za-z0-9_-]+')
+        ->middleware('permission:manage settings')
+        ->name('settings.search.edit');
+
     Route::post('/settings', [SettingsController::class, 'update'])
         ->middleware('permission:manage settings')
         ->name('settings.update');
+
+    Route::post('/settings/search', [SettingsController::class, 'storeSearch'])
+        ->middleware('permission:manage settings')
+        ->name('settings.search.store');
+
+    Route::put('/settings/search/{searchKey}', [SettingsController::class, 'updateSearch'])
+        ->where('searchKey', '[A-Za-z0-9_-]+')
+        ->middleware('permission:manage settings')
+        ->name('settings.search.update');
+
+    Route::delete('/settings/search/{searchKey}', [SettingsController::class, 'deleteSearch'])
+        ->where('searchKey', '[A-Za-z0-9_-]+')
+        ->middleware('permission:manage settings')
+        ->name('settings.search.delete');
+
+    Route::post('/settings/search/debounce', [SettingsController::class, 'updateSearchDebounce'])
+        ->middleware('permission:manage settings')
+        ->name('settings.search.debounce');
+
+    Route::post('/settings/search/registry', [SettingsController::class, 'updateSearchRegistry'])
+        ->middleware('permission:manage settings')
+        ->name('settings.search.registry');
 
     Route::post('/settings/branding', [SettingsController::class, 'updateBranding'])
         ->middleware('permission:manage settings')

@@ -24,6 +24,7 @@
     if ($brandDisplayName === '') {
       $brandDisplayName = (string) config('app.name', 'HariLog');
     }
+    $searchDebounceMs = max(80, min((int) \App\Support\AppSettings::get('search.debounce_ms', '180'), 1500));
     $hotReloadEnabled = app()->environment('local') && filter_var((string) env('HAARRAY_HOT_RELOAD', 'true'), FILTER_VALIDATE_BOOL);
   @endphp
   <meta charset="UTF-8">
@@ -72,6 +73,7 @@
   data-file-manager-export-url="{{ route('ui.filemanager.export') }}"
   data-file-manager-resize-url="{{ route('ui.filemanager.resize') }}"
   data-global-search-url="{{ route('ui.search.global') }}"
+  data-global-search-debounce="{{ $searchDebounceMs }}"
   data-theme-color="{{ $themeColor }}"
   data-notification-read-all-url="{{ auth()->user()->can('view notifications') ? route('notifications.read_all') : '' }}"
   data-notification-sound-url="{{ $brandNotificationSound }}"
@@ -160,7 +162,7 @@
     @endcan
     @if(auth()->user()->can('view settings'))
       @php
-        $settingsRouteActive = request()->routeIs('settings.index') || request()->routeIs('settings.users.*') || request()->routeIs('settings.media.*') || request()->routeIs('settings.rbac*');
+        $settingsRouteActive = request()->routeIs('settings.index') || request()->routeIs('settings.users.*') || request()->routeIs('settings.media.*') || request()->routeIs('settings.rbac*') || request()->routeIs('settings.search.*');
       @endphp
       <div
         class="h-nav-group {{ $settingsRouteActive ? 'open' : '' }}"
