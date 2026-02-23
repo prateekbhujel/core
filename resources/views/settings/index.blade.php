@@ -39,7 +39,7 @@
     <span class="h-pill teal">DB: {{ $dbLabel }}</span>
   </div>
 
-  <div class="h-tab-shell h-settings-shell h-settings-shell--sidebar-nav" id="settings-main-tabs" data-ui-tabs data-default-tab="{{ $defaultSettingsTab }}">
+  <div class="h-tab-shell h-settings-shell" id="settings-main-tabs" data-ui-tabs data-default-tab="{{ $defaultSettingsTab }}">
     <div class="h-tab-nav" role="tablist" aria-label="Settings sections">
       <button type="button" class="h-tab-btn" data-tab-btn="settings-app"><i class="fa-solid fa-palette"></i> Branding</button>
       <button type="button" class="h-tab-btn" data-tab-btn="settings-activity"><i class="fa-solid fa-chart-line"></i> Activity</button>
