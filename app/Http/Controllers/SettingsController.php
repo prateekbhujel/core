@@ -35,7 +35,6 @@ class SettingsController extends Controller
         $viewer = request()->user();
         $dbConnectionInfo = $this->databaseConnectionInfo();
         $uiBranding = AppSettings::uiBranding();
-        $mediaLibrary = $this->brandingMediaLibrary();
         $notificationSoundUrl = AppSettings::resolveUiAsset(AppSettings::get('ui.notification_sound_url', ''));
         $searchRegistryJson = AppSettings::get('search.registry_json', '');
         $roleOptions = $this->availableRoleNames();
@@ -59,10 +58,25 @@ class SettingsController extends Controller
             'canManageSettings' => $canManageSettings,
             'dbConnectionInfo' => $dbConnectionInfo,
             'uiBranding' => $uiBranding,
-            'mediaLibrary' => $mediaLibrary,
             'notificationSoundUrl' => $notificationSoundUrl,
             'searchRegistryJson' => $searchRegistryJson,
             'roleOptions' => $roleOptions,
+        ]);
+    }
+
+    public function media(Request $request): View
+    {
+        $this->assertCan($request, 'view settings', 'You do not have permission to view the media manager.');
+
+        $folder = trim(str_replace('\\', '/', (string) $request->query('folder', '')), '/');
+        $defaultDisk = trim((string) config('filesystems.default', 'local'));
+        $s3Bucket = trim((string) config('filesystems.disks.s3.bucket', ''));
+        $usingS3 = $defaultDisk === 's3' && $s3Bucket !== '';
+
+        return view('settings.media', [
+            'initialFolder' => $folder,
+            'storageLabel' => $usingS3 ? ('AWS S3: ' . $s3Bucket) : 'Local /public/uploads',
+            'storageDisk' => $usingS3 ? 's3' : 'public',
         ]);
     }
 
@@ -1281,6 +1295,10 @@ class SettingsController extends Controller
                 'title'       => 'Realtime & Broadcast',
                 'description' => 'Polling behavior now, plus Pusher keys for optional realtime transports.',
             ],
+            'storage' => [
+                'title'       => 'Storage',
+                'description' => 'Media/file storage driver and optional AWS S3 credentials.',
+            ],
             'database' => [
                 'title'       => 'Database',
                 'description' => 'Connection details used by Laravel database config.',
@@ -1496,6 +1514,63 @@ class SettingsController extends Controller
                 'type'     => 'bool',
                 'required' => true,
                 'default'  => 'true',
+            ],
+            'FILESYSTEM_DISK' => [
+                'section'  => 'storage',
+                'label'    => 'Filesystem Disk',
+                'type'     => 'select',
+                'required' => true,
+                'options'  => ['local', 'public', 's3'],
+                'default'  => 'local',
+            ],
+            'AWS_ACCESS_KEY_ID' => [
+                'section'  => 'storage',
+                'label'    => 'AWS Access Key ID',
+                'type'     => 'text',
+                'required' => false,
+                'default'  => '',
+            ],
+            'AWS_SECRET_ACCESS_KEY' => [
+                'section'  => 'storage',
+                'label'    => 'AWS Secret Access Key',
+                'type'     => 'password',
+                'required' => false,
+                'default'  => '',
+            ],
+            'AWS_DEFAULT_REGION' => [
+                'section'  => 'storage',
+                'label'    => 'AWS Region',
+                'type'     => 'text',
+                'required' => false,
+                'default'  => 'us-east-1',
+            ],
+            'AWS_BUCKET' => [
+                'section'  => 'storage',
+                'label'    => 'AWS Bucket',
+                'type'     => 'text',
+                'required' => false,
+                'default'  => '',
+            ],
+            'AWS_URL' => [
+                'section'  => 'storage',
+                'label'    => 'AWS URL (optional)',
+                'type'     => 'url',
+                'required' => false,
+                'default'  => '',
+            ],
+            'AWS_ENDPOINT' => [
+                'section'  => 'storage',
+                'label'    => 'AWS Endpoint (optional)',
+                'type'     => 'url',
+                'required' => false,
+                'default'  => '',
+            ],
+            'AWS_USE_PATH_STYLE_ENDPOINT' => [
+                'section'  => 'storage',
+                'label'    => 'AWS Path Style Endpoint',
+                'type'     => 'bool',
+                'required' => true,
+                'default'  => 'false',
             ],
             'DB_HOST' => [
                 'section'  => 'database',

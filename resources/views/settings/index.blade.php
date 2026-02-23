@@ -176,65 +176,23 @@
           <div class="head h-split">
             <div>
               <div style="font-family:var(--fd);font-size:16px;font-weight:700;">Media Library</div>
-              <div class="h-muted" style="font-size:13px;">Inject assets directly into fields. Delete unused media safely from here.</div>
+              <div class="h-muted" style="font-size:13px;">Use dedicated folder-based media manager for upload, delete, CSV export, and image resize.</div>
             </div>
-            <button type="button" class="btn btn-outline-secondary btn-sm" data-media-manager-open>
-              <i class="fa-solid fa-folder-open me-2"></i>
-              Open Full Library
-            </button>
+            <div class="h-row" style="gap:8px;">
+              <button type="button" class="btn btn-outline-secondary btn-sm" data-media-manager-open>
+                <i class="fa-solid fa-folder-open me-2"></i>
+                Quick Modal
+              </button>
+              <a href="{{ route('settings.media.index') }}" data-spa class="btn btn-primary btn-sm">
+                <i class="fa-solid fa-photo-film me-2"></i>
+                Open Media Page
+              </a>
+            </div>
           </div>
           <div class="body">
-            @if(empty($mediaLibrary))
-              <div class="h-note">No media found in <code>/public/uploads</code>.</div>
-            @else
-              <div class="h-media-grid">
-                @foreach($mediaLibrary as $asset)
-                  @php
-                    $assetType = (string) ($asset['type'] ?? 'image');
-                    $assetPath = trim((string) ($asset['path'] ?? ''));
-                    if ($assetPath === '') {
-                        $assetPath = ltrim((string) parse_url((string) ($asset['url'] ?? ''), PHP_URL_PATH), '/');
-                    }
-                  @endphp
-                  <div class="h-media-card">
-                    @if($assetType === 'audio')
-                      <div class="h-note" style="height:120px;display:flex;align-items:center;justify-content:center;">
-                        <i class="fa-solid fa-wave-square" style="font-size:24px;"></i>
-                      </div>
-                    @else
-                      <img src="{{ $asset['url'] }}" alt="{{ $asset['name'] }}">
-                    @endif
-
-                    <div class="h-media-meta">
-                      <div class="h-media-name" title="{{ $asset['name'] }}">{{ $asset['name'] }}</div>
-                      <div class="h-muted" style="font-size:11px;">{{ $asset['extension'] ?? '' }} • {{ $asset['size_kb'] }} KB • {{ $asset['modified_at'] }}</div>
-                    </div>
-
-                    <div class="h-media-actions">
-                      <button type="button" class="btn btn-outline-secondary btn-sm" data-media-pick data-media-target="ui-logo-url" data-media-url="{{ $asset['url'] }}">Logo</button>
-                      <button type="button" class="btn btn-outline-secondary btn-sm" data-media-pick data-media-target="ui-favicon-url" data-media-url="{{ $asset['url'] }}">Favicon</button>
-                      <button type="button" class="btn btn-outline-secondary btn-sm" data-media-pick data-media-target="ui-app-icon-url" data-media-url="{{ $asset['url'] }}">App Icon</button>
-                      <button type="button" class="btn btn-outline-secondary btn-sm" data-media-pick data-media-target="ui-notification-sound-url" data-media-url="{{ $asset['url'] }}">Sound</button>
-                      <form method="POST" action="{{ route('settings.branding.media.delete') }}" data-spa data-confirm="true" data-confirm-title="Delete media?" data-confirm-text="This media file will be removed permanently.">
-                        @csrf
-                        @method('DELETE')
-                        <input type="hidden" name="asset_path" value="{{ $assetPath }}">
-                        <input type="hidden" name="asset_url" value="{{ $asset['url'] }}">
-                        <button type="submit" class="btn btn-outline-danger btn-sm" title="Delete media" @disabled($assetPath === '')>
-                          <i class="fa-solid fa-xmark"></i>
-                        </button>
-                      </form>
-                    </div>
-
-                    @if($assetType === 'audio')
-                      <div style="padding:0 10px 10px;">
-                        <audio controls preload="none" class="w-100" src="{{ $asset['url'] }}"></audio>
-                      </div>
-                    @endif
-                  </div>
-                @endforeach
-              </div>
-            @endif
+            <div class="h-note">
+              Manage media from <code>Settings → Media Library</code>. It supports folder creation, CSV export, local image resize, and local/S3 fallback storage.
+            </div>
           </div>
         </div>
       @else
@@ -522,21 +480,6 @@ app(\App\Support\Notifier::class)->toRole(
   document.addEventListener('h:tabs:changed', function (event) {
     if (!event.detail || event.detail.container !== tabs) return;
     updateQuery(event.detail.tabId);
-  });
-
-  document.addEventListener('click', function (event) {
-    const trigger = event.target.closest('[data-media-pick]');
-    if (!trigger) return;
-
-    const targetId = trigger.getAttribute('data-media-target');
-    const mediaUrl = trigger.getAttribute('data-media-url') || '';
-    const target = document.getElementById(targetId);
-    if (!target) return;
-
-    target.value = mediaUrl;
-    target.dispatchEvent(new Event('input', { bubbles: true }));
-    target.dispatchEvent(new Event('change', { bubbles: true }));
-    if (window.HToast) HToast.success('Selected asset applied. Save settings to persist.');
   });
 })();
 </script>

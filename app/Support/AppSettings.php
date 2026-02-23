@@ -92,8 +92,11 @@ class AppSettings
         }
 
         if (preg_match('/^(https?:)?\/\//i', $raw) || str_starts_with($raw, 'data:')) {
+            $parsedHost = strtolower((string) (parse_url($raw, PHP_URL_HOST) ?? ''));
+            $appHost = strtolower((string) (parse_url((string) config('app.url', ''), PHP_URL_HOST) ?? ''));
+            $sameHost = $parsedHost !== '' && $appHost !== '' && $parsedHost === $appHost;
             $parsedPath = (string) (parse_url($raw, PHP_URL_PATH) ?? '');
-            if ($parsedPath !== '' && str_contains($parsedPath, '/uploads/')) {
+            if ($sameHost && $parsedPath !== '' && str_contains($parsedPath, '/uploads/')) {
                 $relative = ltrim($parsedPath, '/');
                 if (!is_file(public_path($relative))) {
                     return '';

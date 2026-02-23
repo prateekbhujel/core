@@ -844,6 +844,7 @@
   const HMediaManager = {
     _targetInputId: '',
     _query: '',
+    _folder: '',
     _searchTimer: null,
 
     init() {
@@ -861,6 +862,18 @@
         this._searchTimer = window.setTimeout(() => this.load(), 170);
       });
 
+      $(document).on('change', '#h-media-manager-folder', (event) => {
+        const nextFolder = String(event.currentTarget.value || '').trim();
+        this._setFolder(nextFolder);
+      });
+
+      $(document).on('keydown', '#h-media-manager-folder', (event) => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        const nextFolder = String(event.currentTarget.value || '').trim();
+        this._setFolder(nextFolder);
+      });
+
       $(document).on('click', '#h-media-manager-pick', (event) => {
         event.preventDefault();
         const fileInput = document.getElementById('h-media-manager-file');
@@ -876,6 +889,17 @@
       $(document).on('click', '#h-media-manager-upload', (event) => {
         event.preventDefault();
         this.upload();
+      });
+
+      $(document).on('click', '#h-media-manager-create-folder', (event) => {
+        event.preventDefault();
+        this.createFolder();
+      });
+
+      $(document).on('click', '[data-media-open-folder]', (event) => {
+        event.preventDefault();
+        const folder = String($(event.currentTarget).data('mediaOpenFolder') || '').trim();
+        this._setFolder(folder);
       });
 
       $(document).on('click', '[data-media-pick-url]', (event) => {
@@ -902,8 +926,17 @@
     open() {
       this._syncFileName();
       this._syncTargetNote();
+      this._syncFolderInput();
+      this._syncExportLink();
       HModal.open('h-media-manager-modal');
       this.load();
+    },
+
+    _setFolder(folder, refresh = true) {
+      this._folder = this._sanitizeFolder(folder);
+      this._syncFolderInput();
+      this._syncExportLink();
+      if (refresh) this.load();
     },
 
     load() {
@@ -912,22 +945,47 @@
       if (!endpoint || !grid || !window.HApi) return;
 
       grid.innerHTML = '<div class="h-notif-empty"><i class="fa-solid fa-spinner fa-spin"></i><span>Loading media...</span></div>';
-      HApi.get(endpoint, { q: this._query, limit: 160 })
+      HApi.get(endpoint, { q: this._query, limit: 160, folder: this._folder })
         .done((payload) => {
           const items = Array.isArray(payload.items) ? payload.items : [];
-          this.render(items);
+          const folders = Array.isArray(payload.folders) ? payload.folders : [];
+          const currentFolder = String(payload.current_folder || this._folder || '').trim();
+          this.render(items, folders, currentFolder);
         })
         .fail(() => {
           grid.innerHTML = '<div class="h-notif-empty"><i class="fa-regular fa-circle-xmark"></i><span>Unable to load media.</span></div>';
         });
     },
 
-    render(items) {
+    render(items, folders = [], currentFolder = '') {
       const grid = document.getElementById('h-media-manager-grid');
       if (!grid) return;
 
+      this._folder = this._sanitizeFolder(currentFolder);
+      this._syncFolderInput();
+      this._syncExportLink();
+
+      const folderButtons = [];
+      const folderPath = this._folder;
+
+      if (folderPath !== '') {
+        folderButtons.push('<button type="button" class="btn btn-outline-secondary btn-sm" data-media-open-folder=""><i class="fa-solid fa-house me-1"></i>Root</button>');
+        const parent = folderPath.includes('/') ? folderPath.slice(0, folderPath.lastIndexOf('/')) : '';
+        folderButtons.push('<button type="button" class="btn btn-outline-secondary btn-sm" data-media-open-folder="' + this._escape(parent) + '"><i class="fa-solid fa-arrow-left me-1"></i>Up</button>');
+      }
+
+      folders.forEach((folder) => {
+        const path = this._escape(folder.path || '');
+        const name = this._escape(folder.name || path || 'Folder');
+        folderButtons.push('<button type="button" class="btn btn-outline-secondary btn-sm" data-media-open-folder="' + path + '"><i class="fa-regular fa-folder me-1"></i>' + name + '</button>');
+      });
+
+      const folderStrip = folderButtons.length
+        ? ('<div class="h-row mb-2" style="gap:8px;flex-wrap:wrap;">' + folderButtons.join('') + '</div>')
+        : '';
+
       if (!Array.isArray(items) || items.length === 0) {
-        grid.innerHTML = '<div class="h-notif-empty"><i class="fa-regular fa-folder-open"></i><span>No files found.</span></div>';
+        grid.innerHTML = folderStrip + '<div class="h-notif-empty"><i class="fa-regular fa-folder-open"></i><span>No files found.</span></div>';
         return;
       }
 
@@ -971,7 +1029,7 @@
         `;
       }).join('');
 
-      grid.innerHTML = rows;
+      grid.innerHTML = folderStrip + rows;
     },
 
     upload() {
@@ -988,7 +1046,7 @@
       const token = String((document.querySelector('meta[name="csrf-token"]') || {}).content || '');
       const data = new FormData();
       data.append('file', file);
-      data.append('folder', 'library');
+      data.append('folder', this._folder || 'library');
 
       $.ajax({
         url: endpoint,
@@ -1011,6 +1069,54 @@
         const message = xhr && xhr.responseJSON && xhr.responseJSON.message
           ? xhr.responseJSON.message
           : 'Upload failed.';
+        HToast.error(message);
+      });
+    },
+
+    createFolder() {
+      const endpoint = String(document.body.dataset.fileManagerFolderUrl || '').trim();
+      if (!endpoint || !window.HApi || typeof window.HApi.post !== 'function') {
+        HToast.error('Media folder endpoint is not configured.');
+        return;
+      }
+
+      const folderInput = document.getElementById('h-media-manager-folder');
+      const typed = folderInput && folderInput instanceof HTMLInputElement
+        ? this._sanitizeFolder(String(folderInput.value || '').trim())
+        : '';
+
+      let entered = '';
+      if (typed && typed !== this._folder) {
+        entered = typed;
+      } else {
+        const suggested = this._folder ? (this._folder + '/new-folder') : 'new-folder';
+        const response = window.prompt('Folder path (example: branding/icons)', suggested);
+        entered = this._sanitizeFolder(String(response || '').trim());
+      }
+
+      if (!entered) return;
+
+      const parts = entered.split('/');
+      const name = String(parts.pop() || '').trim();
+      const parent = this._sanitizeFolder(parts.join('/'));
+      if (!name) {
+        HToast.warning('Folder name is missing.');
+        return;
+      }
+
+      HApi.post(endpoint, { name, parent }, {
+        dataType: 'json',
+        headers: {
+          Accept: 'application/json',
+        },
+      }).done((payload) => {
+        const message = payload && payload.message ? payload.message : 'Folder created.';
+        HToast.success(message);
+        this._setFolder(entered);
+      }).fail((xhr) => {
+        const message = xhr && xhr.responseJSON && xhr.responseJSON.message
+          ? xhr.responseJSON.message
+          : 'Unable to create folder.';
         HToast.error(message);
       });
     },
@@ -1098,6 +1204,40 @@
         return;
       }
       fileName.textContent = String(fileInput.files[0].name || 'Selected file');
+    },
+
+    _syncFolderInput() {
+      const input = document.getElementById('h-media-manager-folder');
+      if (!input || !(input instanceof HTMLInputElement)) return;
+      input.value = this._folder;
+    },
+
+    _syncExportLink() {
+      const link = document.getElementById('h-media-manager-export');
+      const endpoint = String(document.body.dataset.fileManagerExportUrl || '').trim();
+      if (!link || !(link instanceof HTMLAnchorElement) || !endpoint) return;
+
+      const url = new URL(endpoint, window.location.origin);
+      if (this._folder) {
+        url.searchParams.set('folder', this._folder);
+      } else {
+        url.searchParams.delete('folder');
+      }
+      link.href = url.toString();
+    },
+
+    _sanitizeFolder(folder) {
+      const cleaned = String(folder || '').replace(/\\/g, '/').trim().replace(/^\/+|\/+$/g, '');
+      if (!cleaned) return '';
+
+      const segments = cleaned
+        .split('/')
+        .map((segment) => segment.trim())
+        .filter((segment) => segment && segment !== '.' && segment !== '..')
+        .map((segment) => segment.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, ''))
+        .filter(Boolean);
+
+      return segments.join('/');
     },
 
     _escape(input) {
@@ -1851,6 +1991,10 @@
         'iconSpriteUrl',
         'fileManagerListUrl',
         'fileManagerUploadUrl',
+        'fileManagerDeleteUrl',
+        'fileManagerFolderUrl',
+        'fileManagerExportUrl',
+        'fileManagerResizeUrl',
         'globalSearchUrl',
         'faviconUrl',
         'themeColor',

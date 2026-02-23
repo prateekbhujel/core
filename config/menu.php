@@ -20,6 +20,14 @@ return [
             'active_route' => 'settings.users.*',
         ],
         [
+            'label' => 'Media Library',
+            'icon' => 'fa-solid fa-photo-film',
+            'route' => 'settings.media.index',
+            'params' => [],
+            'permission' => 'view settings',
+            'active_route' => 'settings.media.*',
+        ],
+        [
             'label' => 'Roles & Access',
             'icon' => 'fa-solid fa-user-lock',
             'route' => 'settings.rbac',

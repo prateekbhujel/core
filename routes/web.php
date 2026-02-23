@@ -41,6 +41,10 @@ Route::middleware('auth')->group(function () {
         ->middleware('permission:view users')
         ->name('settings.users.index');
 
+    Route::get('/settings/media', [SettingsController::class, 'media'])
+        ->middleware('permission:view settings')
+        ->name('settings.media.index');
+
     Route::get('/settings/rbac', [SettingsController::class, 'rbac'])
         ->middleware('permission:manage settings')
         ->name('settings.rbac');
@@ -144,6 +148,18 @@ Route::middleware('auth')->group(function () {
     Route::post('/ui/file-manager/delete', [UiOptionsController::class, 'fileManagerDelete'])
         ->middleware('permission:manage settings')
         ->name('ui.filemanager.delete');
+
+    Route::post('/ui/file-manager/folder', [UiOptionsController::class, 'fileManagerCreateFolder'])
+        ->middleware('permission:manage settings')
+        ->name('ui.filemanager.folder');
+
+    Route::post('/ui/file-manager/resize', [UiOptionsController::class, 'fileManagerResize'])
+        ->middleware('permission:manage settings')
+        ->name('ui.filemanager.resize');
+
+    Route::get('/ui/file-manager/export-csv', [UiOptionsController::class, 'fileManagerExportCsv'])
+        ->middleware('permission:view settings')
+        ->name('ui.filemanager.export');
 
     Route::get('/ui/search/global', [UiOptionsController::class, 'globalSearch'])
         ->name('ui.search.global');

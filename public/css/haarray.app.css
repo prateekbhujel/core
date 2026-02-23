@@ -752,7 +752,7 @@ body.h-sidebar-compact .h-user-card .h-user-role {
 }
 .h-media-manager-head {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) minmax(220px, 1fr) auto;
+  grid-template-columns: minmax(170px, 1fr) minmax(200px, 1fr) minmax(240px, 1fr) auto;
   gap: 8px;
   align-items: center;
 }

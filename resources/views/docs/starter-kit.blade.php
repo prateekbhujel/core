@@ -59,6 +59,10 @@
         <i class="fa-solid fa-chart-pie"></i>
         Visuals
       </button>
+      <button type="button" class="h-tab-btn" data-tab-btn="docs-tutorials">
+        <i class="fa-solid fa-graduation-cap"></i>
+        Tutorials
+      </button>
     </div>
 
     <div class="h-tab-panel" data-tab-panel="docs-foundation">
@@ -434,6 +438,47 @@ return DataTables::eloquent(User::query())
             data-pie='[{"label":"Savings","value":45,"color":"#34d399"},{"label":"Expense","value":35,"color":"#2f7df6"},{"label":"Investments","value":20,"color":"#60a5fa"}]'
           ></div>
         </div>
+      </section>
+    </div>
+
+    <div class="h-tab-panel" data-tab-panel="docs-tutorials">
+      <section class="doc-block">
+        <h3>Starter Tutorials</h3>
+        <p>Use these guided docs to build production modules quickly with the same conventions used in this starter.</p>
+        <ul>
+          <li><code>docs/tutorials/CRUD_WORKFLOW.md</code> for list + create/edit/delete flow with DataTables and confirm modal.</li>
+          <li><code>docs/tutorials/NOTIFIER_HELPER.md</code> for in-app and Telegram notification dispatch from controllers/services/jobs.</li>
+          <li><code>docs/tutorials/MEDIA_MANAGER.md</code> for folder-based media management, URL injection, and S3/local behavior.</li>
+          <li><code>docs/tutorials/INTEGRATIONS_FACEBOOK_TELEGRAM.md</code> for auth and messaging integration setup.</li>
+          <li><code>docs/tutorials/DEPLOYMENT_MODES.md</code> for artisan server, PHP built-in server, and XAMPP subfolder deployment.</li>
+        </ul>
+      </section>
+
+      <section class="doc-block">
+        <h3>Media Manager API</h3>
+        <p>Dedicated media page route: <code>{{ route('settings.media.index') }}</code>. Global modal and editor image picker both use the same API.</p>
+        <pre><code>GET  /ui/file-manager            // list files + folders
+POST /ui/file-manager/upload     // upload image/audio
+POST /ui/file-manager/delete     // delete file
+POST /ui/file-manager/folder     // create folder
+POST /ui/file-manager/resize     // resize image (local storage mode)
+GET  /ui/file-manager/export-csv // export media index</code></pre>
+        <div class="h-note">
+          Storage behavior: when <code>FILESYSTEM_DISK=s3</code> and bucket config is present, file-manager operations use S3.
+          Otherwise it falls back to local <code>/public/uploads</code>.
+        </div>
+      </section>
+
+      <section class="doc-block">
+        <h3>Custom Error Views</h3>
+        <p>Starter ships custom pages for <code>403</code>, <code>404</code>, <code>419</code>, <code>429</code>, <code>500</code>, and <code>503</code>.</p>
+        <pre><code>resources/views/errors/layout.blade.php
+resources/views/errors/403.blade.php
+resources/views/errors/404.blade.php
+resources/views/errors/419.blade.php
+resources/views/errors/429.blade.php
+resources/views/errors/500.blade.php
+resources/views/errors/503.blade.php</code></pre>
       </section>
     </div>
   </div>

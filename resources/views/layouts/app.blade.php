@@ -68,6 +68,9 @@
   data-file-manager-list-url="{{ route('ui.filemanager.index') }}"
   data-file-manager-upload-url="{{ route('ui.filemanager.upload') }}"
   data-file-manager-delete-url="{{ route('ui.filemanager.delete') }}"
+  data-file-manager-folder-url="{{ route('ui.filemanager.folder') }}"
+  data-file-manager-export-url="{{ route('ui.filemanager.export') }}"
+  data-file-manager-resize-url="{{ route('ui.filemanager.resize') }}"
   data-global-search-url="{{ route('ui.search.global') }}"
   data-theme-color="{{ $themeColor }}"
   data-notification-read-all-url="{{ auth()->user()->can('view notifications') ? route('notifications.read_all') : '' }}"
@@ -157,7 +160,7 @@
     @endcan
     @if(auth()->user()->can('view settings'))
       @php
-        $settingsRouteActive = request()->routeIs('settings.index') || request()->routeIs('settings.users.*') || request()->routeIs('settings.rbac*');
+        $settingsRouteActive = request()->routeIs('settings.index') || request()->routeIs('settings.users.*') || request()->routeIs('settings.media.*') || request()->routeIs('settings.rbac*');
       @endphp
       <div
         class="h-nav-group {{ $settingsRouteActive ? 'open' : '' }}"
@@ -444,6 +447,13 @@
       <div class="h-media-manager-head">
         <input type="text" class="form-control form-control-sm" id="h-media-manager-search" placeholder="Search media files...">
         <div class="h-media-upload-row">
+          <input type="text" class="form-control form-control-sm" id="h-media-manager-folder" placeholder="Folder (optional)">
+          <button type="button" class="btn btn-sm btn-outline-secondary" id="h-media-manager-create-folder">
+            <i class="fa-solid fa-folder-plus me-1"></i>
+            Folder
+          </button>
+        </div>
+        <div class="h-media-upload-row">
           <input type="file" class="d-none" id="h-media-manager-file" accept=".jpg,.jpeg,.png,.webp,.gif,.svg,.ico,.mp3,.wav,.ogg,.m4a,.aac,.flac,image/*,audio/*">
           <button type="button" class="btn btn-sm btn-outline-secondary" id="h-media-manager-pick">
             <i class="fa-solid fa-paperclip me-1"></i>
@@ -451,10 +461,16 @@
           </button>
           <span class="h-media-upload-file" id="h-media-manager-file-name">No file selected</span>
         </div>
-        <button type="button" class="btn btn-sm btn-primary" id="h-media-manager-upload">
-          <i class="fa-solid fa-upload me-1"></i>
-          Upload
-        </button>
+        <div class="h-row" style="gap:8px;justify-content:flex-end;">
+          <a href="{{ route('ui.filemanager.export') }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary" id="h-media-manager-export">
+            <i class="fa-solid fa-file-csv me-1"></i>
+            CSV
+          </a>
+          <button type="button" class="btn btn-sm btn-primary" id="h-media-manager-upload">
+            <i class="fa-solid fa-upload me-1"></i>
+            Upload
+          </button>
+        </div>
       </div>
       <div class="h-note mt-2 mb-2" id="h-media-manager-target-note" hidden></div>
       <div class="h-media-manager-grid" id="h-media-manager-grid">

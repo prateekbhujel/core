@@ -9,12 +9,15 @@ use App\Support\HealthCheckService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Spatie\Permission\Models\Role;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
 use Yajra\DataTables\Facades\DataTables;
 
@@ -240,47 +243,104 @@ class UiOptionsController extends Controller
 
         $query = trim((string) $request->query('q', ''));
         $limit = max(20, min((int) $request->query('limit', 80), 300));
-        $directory = public_path('uploads');
+        $folder = $this->sanitizeMediaFolder((string) $request->query('folder', ''));
+        $baseRelative = $this->mediaBaseRelativePath($folder);
+        $storage = $this->mediaStorageTarget();
+        $allowedExtensions = $this->allowedMediaExtensions();
 
-        if (!File::isDirectory($directory)) {
-            return response()->json(['items' => []]);
+        $items = [];
+        $folders = [];
+
+        if ($storage['mode'] === 'disk') {
+            $disk = Storage::disk((string) $storage['disk']);
+
+            try {
+                $files = collect($disk->files($baseRelative, false))
+                    ->filter(function (string $path) use ($allowedExtensions, $query) {
+                        $extension = strtolower((string) pathinfo($path, PATHINFO_EXTENSION));
+                        if (!in_array($extension, $allowedExtensions, true)) {
+                            return false;
+                        }
+                        if ($query === '') {
+                            return true;
+                        }
+                        return str_contains(strtolower((string) basename($path)), strtolower($query));
+                    })
+                    ->map(function (string $path) use ($disk, $storage) {
+                        return $this->buildDiskMediaItem($disk, $path, (string) $storage['disk']);
+                    })
+                    ->filter()
+                    ->sortByDesc(fn (array $item) => (string) ($item['modified_at'] ?? ''))
+                    ->take($limit)
+                    ->values()
+                    ->all();
+
+                $items = $files;
+
+                $folders = collect($disk->directories($baseRelative))
+                    ->map(function (string $path) {
+                        $cleanPath = trim((string) preg_replace('#^uploads/?#', '', str_replace('\\', '/', $path)), '/');
+                        return [
+                            'name' => basename($cleanPath),
+                            'path' => $cleanPath,
+                        ];
+                    })
+                    ->sortBy('name')
+                    ->values()
+                    ->all();
+            } catch (Throwable) {
+                $items = [];
+                $folders = [];
+            }
+        } else {
+            $directory = public_path($baseRelative);
+            if (File::isDirectory($directory)) {
+                $items = collect(File::files($directory))
+                    ->filter(function ($file) use ($allowedExtensions, $query) {
+                        $extension = strtolower((string) $file->getExtension());
+                        if (!in_array($extension, $allowedExtensions, true)) {
+                            return false;
+                        }
+                        if ($query === '') {
+                            return true;
+                        }
+                        return str_contains(strtolower((string) $file->getFilename()), strtolower($query));
+                    })
+                    ->map(function ($file) {
+                        $absolutePath = (string) $file->getPathname();
+                        $relative = str_replace('\\', '/', ltrim(str_replace(public_path(), '', $absolutePath), '/'));
+                        return $this->buildLocalMediaItem($relative);
+                    })
+                    ->filter()
+                    ->sortByDesc(fn (array $item) => (string) ($item['modified_at'] ?? ''))
+                    ->take($limit)
+                    ->values()
+                    ->all();
+
+                $folders = collect(File::directories($directory))
+                    ->map(function (string $absoluteDirectory) {
+                        $relative = str_replace('\\', '/', ltrim(str_replace(public_path('uploads'), '', $absoluteDirectory), '/'));
+                        return [
+                            'name' => basename($absoluteDirectory),
+                            'path' => trim($relative, '/'),
+                        ];
+                    })
+                    ->sortBy('name')
+                    ->values()
+                    ->all();
+            }
         }
 
-        $allowedExtensions = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg', 'ico', 'mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac'];
-        $files = collect(File::allFiles($directory))
-            ->filter(function ($file) use ($allowedExtensions) {
-                return in_array(strtolower((string) $file->getExtension()), $allowedExtensions, true);
-            })
-            ->when($query !== '', function ($items) use ($query) {
-                return $items->filter(function ($file) use ($query) {
-                    return str_contains(strtolower((string) $file->getFilename()), strtolower($query));
-                });
-            })
-            ->sortByDesc(fn ($file) => (int) $file->getMTime())
-            ->take($limit)
-            ->values();
-
-        $items = $files->map(function ($file) {
-            $absolutePath = (string) $file->getPathname();
-            $relative = str_replace('\\', '/', ltrim(str_replace(public_path(), '', $absolutePath), '/'));
-            $extension = strtolower((string) $file->getExtension());
-
-            $type = in_array($extension, ['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg', 'ico'], true)
-                ? 'image'
-                : (in_array($extension, ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac'], true) ? 'audio' : 'file');
-
-            return [
-                'name' => (string) $file->getFilename(),
-                'path' => $relative,
-                'url' => url($relative),
-                'type' => $type,
-                'extension' => $extension,
-                'size_kb' => number_format(((int) $file->getSize()) / 1024, 1),
-                'modified_at' => date('Y-m-d H:i', (int) $file->getMTime()),
-            ];
-        })->all();
-
-        return response()->json(['items' => $items]);
+        return response()->json([
+            'items' => $items,
+            'folders' => $folders,
+            'current_folder' => $folder,
+            'storage' => [
+                'mode' => $storage['mode'],
+                'disk' => $storage['disk'],
+                'label' => $storage['label'],
+            ],
+        ]);
     }
 
     public function fileManagerDelete(Request $request): JsonResponse
@@ -293,7 +353,7 @@ class UiOptionsController extends Controller
             'path' => ['required', 'string', 'max:255'],
         ]);
 
-        $relativePath = ltrim(str_replace('\\', '/', (string) $validated['path']), '/');
+        $relativePath = $this->normalizeMediaPath((string) $validated['path']);
         if (!str_starts_with($relativePath, 'uploads/')) {
             return response()->json([
                 'ok' => false,
@@ -301,35 +361,37 @@ class UiOptionsController extends Controller
             ], 422);
         }
 
-        $absolutePath = public_path($relativePath);
-        $realPublic = realpath(public_path()) ?: public_path();
-        $realFile = realpath($absolutePath);
-        if ($realFile === false || !str_starts_with($realFile, $realPublic) || !File::exists($realFile)) {
-            return response()->json([
-                'ok' => false,
-                'message' => 'Media file not found.',
-            ], 404);
+        $storage = $this->mediaStorageTarget();
+        $absoluteUrl = '';
+
+        if ($storage['mode'] === 'disk') {
+            $disk = Storage::disk((string) $storage['disk']);
+            if (!$disk->exists($relativePath)) {
+                return response()->json([
+                    'ok' => false,
+                    'message' => 'Media file not found.',
+                ], 404);
+            }
+
+            $absoluteUrl = $this->mediaFileUrl($relativePath, $storage);
+            $disk->delete($relativePath);
+        } else {
+            $absolutePath = public_path($relativePath);
+            $realPublic = realpath(public_path()) ?: public_path();
+            $realFile = realpath($absolutePath);
+
+            if ($realFile === false || !str_starts_with($realFile, $realPublic) || !File::exists($realFile)) {
+                return response()->json([
+                    'ok' => false,
+                    'message' => 'Media file not found.',
+                ], 404);
+            }
+
+            $absoluteUrl = $this->mediaFileUrl($relativePath, $storage);
+            File::delete($realFile);
         }
 
-        File::delete($realFile);
-
-        $branding = AppSettings::uiBranding();
-        $updates = [];
-        if (ltrim((string) ($branding['logo_url'] ?? ''), '/') === $relativePath) {
-            $updates['ui.logo_url'] = '';
-        }
-        if (ltrim((string) ($branding['favicon_url'] ?? ''), '/') === $relativePath) {
-            $updates['ui.favicon_url'] = '';
-        }
-        if (ltrim((string) ($branding['app_icon_url'] ?? ''), '/') === $relativePath) {
-            $updates['ui.app_icon_url'] = '';
-        }
-        if (ltrim((string) AppSettings::resolveUiAsset(AppSettings::get('ui.notification_sound_url', '')), '/') === $relativePath) {
-            $updates['ui.notification_sound_url'] = '';
-        }
-        if (!empty($updates)) {
-            AppSettings::putMany($updates);
-        }
+        $this->clearBrandingAssetReferences($relativePath, $absoluteUrl);
 
         return response()->json([
             'ok' => true,
@@ -345,35 +407,333 @@ class UiOptionsController extends Controller
 
         $validated = $request->validate([
             'file' => ['required', 'file', 'mimes:jpg,jpeg,png,webp,gif,svg,ico,mp3,wav,ogg,m4a,aac,flac', 'max:15360'],
-            'folder' => ['nullable', 'string', 'max:80'],
+            'folder' => ['nullable', 'string', 'max:180'],
         ]);
 
-        $folder = trim((string) ($validated['folder'] ?? 'editor'));
-        $folder = preg_replace('/[^a-z0-9_-]/i', '-', $folder) ?: 'editor';
-        $subPath = 'uploads/' . $folder . '/' . now()->format('Y/m');
-        $targetDirectory = public_path($subPath);
-        File::ensureDirectoryExists($targetDirectory, 0775, true);
-
+        $folder = $this->sanitizeMediaFolder((string) ($validated['folder'] ?? 'library'));
+        $targetPath = $this->mediaBaseRelativePath($folder) . '/' . now()->format('Y/m');
         $file = $validated['file'];
-        $extension = strtolower((string) ($file->getClientOriginalExtension() ?: $file->extension() ?: 'png'));
+        if (!$file instanceof UploadedFile) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Invalid upload payload.',
+            ], 422);
+        }
+
+        $extension = strtolower((string) ($file->getClientOriginalExtension() ?: $file->extension() ?: 'bin'));
         $safeExtension = preg_replace('/[^a-z0-9]/i', '', $extension) ?: 'png';
         $filename = now()->format('YmdHis') . '-' . strtolower(str()->random(8)) . '.' . $safeExtension;
-        $file->move($targetDirectory, $filename);
+        $relative = trim($targetPath . '/' . $filename, '/');
 
-        $relative = $subPath . '/' . $filename;
-        $type = in_array($safeExtension, ['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg', 'ico'], true) ? 'image' : 'audio';
+        $storage = $this->mediaStorageTarget();
+        if ($storage['mode'] === 'disk') {
+            $disk = Storage::disk((string) $storage['disk']);
+            $disk->putFileAs($targetPath, $file, $filename, ['visibility' => 'public']);
+            $item = $this->buildDiskMediaItem($disk, $relative, (string) $storage['disk']);
+        } else {
+            $targetDirectory = public_path($targetPath);
+            File::ensureDirectoryExists($targetDirectory, 0775, true);
+            $file->move($targetDirectory, $filename);
+            $item = $this->buildLocalMediaItem($relative);
+        }
+
+        if ($item === null) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Upload succeeded but media metadata could not be generated.',
+            ], 500);
+        }
 
         return response()->json([
             'ok' => true,
-            'item' => [
-                'name' => $filename,
-                'path' => $relative,
-                'url' => url($relative),
-                'type' => $type,
-                'extension' => $safeExtension,
-                'size_kb' => number_format(((int) File::size(public_path($relative))) / 1024, 1),
-                'modified_at' => now()->format('Y-m-d H:i'),
+            'item' => $item,
+        ]);
+    }
+
+    public function fileManagerCreateFolder(Request $request): JsonResponse
+    {
+        if (!$request->user() || !$request->user()->can('manage settings')) {
+            abort(403, 'You do not have permission to create media folders.');
+        }
+
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:80'],
+            'parent' => ['nullable', 'string', 'max:180'],
+        ]);
+
+        $parent = $this->sanitizeMediaFolder((string) ($validated['parent'] ?? ''));
+        $name = $this->sanitizeMediaFolderSegment((string) $validated['name']);
+        if ($name === '') {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Folder name is invalid.',
+            ], 422);
+        }
+
+        $relativeFolder = trim(($parent !== '' ? $parent . '/' : '') . $name, '/');
+        $baseRelative = $this->mediaBaseRelativePath($relativeFolder);
+        $storage = $this->mediaStorageTarget();
+
+        if ($storage['mode'] === 'disk') {
+            $disk = Storage::disk((string) $storage['disk']);
+            $keepFile = trim($baseRelative . '/.keep', '/');
+            $disk->put($keepFile, '', ['visibility' => 'public']);
+        } else {
+            File::ensureDirectoryExists(public_path($baseRelative), 0775, true);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'message' => 'Folder created successfully.',
+            'folder' => [
+                'name' => $name,
+                'path' => $relativeFolder,
             ],
+        ]);
+    }
+
+    public function fileManagerExportCsv(Request $request): StreamedResponse
+    {
+        if (!$request->user() || !$request->user()->can('view settings')) {
+            abort(403, 'You do not have permission to export media files.');
+        }
+
+        $folder = $this->sanitizeMediaFolder((string) $request->query('folder', ''));
+        $baseRelative = $this->mediaBaseRelativePath($folder);
+        $storage = $this->mediaStorageTarget();
+        $filename = 'haarray-media-' . now()->format('Ymd_His') . '.csv';
+        $allowedExtensions = $this->allowedMediaExtensions();
+
+        $headers = [
+            'name',
+            'path',
+            'url',
+            'type',
+            'extension',
+            'size_kb',
+            'modified_at',
+            'storage_mode',
+            'storage_disk',
+        ];
+
+        return response()->streamDownload(function () use ($storage, $baseRelative, $headers, $allowedExtensions): void {
+            $output = fopen('php://output', 'wb');
+            if (!is_resource($output)) {
+                return;
+            }
+
+            fputcsv($output, $headers);
+
+            if ($storage['mode'] === 'disk') {
+                $diskName = (string) $storage['disk'];
+                $disk = Storage::disk($diskName);
+                $paths = $disk->allFiles($baseRelative);
+                foreach ($paths as $path) {
+                    $extension = strtolower((string) pathinfo($path, PATHINFO_EXTENSION));
+                    if (!in_array($extension, $allowedExtensions, true)) {
+                        continue;
+                    }
+
+                    $item = $this->buildDiskMediaItem($disk, $path, $diskName);
+                    if ($item === null) {
+                        continue;
+                    }
+
+                    fputcsv($output, [
+                        $item['name'],
+                        $item['path'],
+                        $item['url'],
+                        $item['type'],
+                        $item['extension'],
+                        $item['size_kb'],
+                        $item['modified_at'],
+                        $storage['mode'],
+                        $storage['disk'],
+                    ]);
+                }
+            } else {
+                $directory = public_path($baseRelative);
+                if (File::isDirectory($directory)) {
+                    $files = File::allFiles($directory);
+                    foreach ($files as $file) {
+                        $extension = strtolower((string) $file->getExtension());
+                        if (!in_array($extension, $allowedExtensions, true)) {
+                            continue;
+                        }
+
+                        $relative = str_replace('\\', '/', ltrim(str_replace(public_path(), '', (string) $file->getPathname()), '/'));
+                        $item = $this->buildLocalMediaItem($relative);
+                        if ($item === null) {
+                            continue;
+                        }
+
+                        fputcsv($output, [
+                            $item['name'],
+                            $item['path'],
+                            $item['url'],
+                            $item['type'],
+                            $item['extension'],
+                            $item['size_kb'],
+                            $item['modified_at'],
+                            $storage['mode'],
+                            $storage['disk'],
+                        ]);
+                    }
+                }
+            }
+
+            fclose($output);
+        }, $filename, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+        ]);
+    }
+
+    public function fileManagerResize(Request $request): JsonResponse
+    {
+        if (!$request->user() || !$request->user()->can('manage settings')) {
+            abort(403, 'You do not have permission to resize media files.');
+        }
+
+        $validated = $request->validate([
+            'path' => ['required', 'string', 'max:255'],
+            'width' => ['required', 'integer', 'between:32,4096'],
+            'height' => ['required', 'integer', 'between:32,4096'],
+            'replace' => ['nullable', 'boolean'],
+        ]);
+
+        $storage = $this->mediaStorageTarget();
+        if ($storage['mode'] !== 'local') {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Image resize is available for local storage mode only.',
+            ], 422);
+        }
+
+        $relativePath = $this->normalizeMediaPath((string) $validated['path']);
+        if (!str_starts_with($relativePath, 'uploads/')) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Only files inside uploads/ can be resized.',
+            ], 422);
+        }
+
+        $absolutePath = public_path($relativePath);
+        $realPublic = realpath(public_path()) ?: public_path();
+        $realFile = realpath($absolutePath);
+        if ($realFile === false || !str_starts_with($realFile, $realPublic) || !File::exists($realFile)) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Image file not found.',
+            ], 404);
+        }
+
+        if (!function_exists('imagecreatetruecolor') || !function_exists('imagecopyresampled') || !function_exists('getimagesize')) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'GD image extension is required for resize.',
+            ], 422);
+        }
+
+        $extension = strtolower((string) pathinfo($realFile, PATHINFO_EXTENSION));
+        if (!in_array($extension, ['jpg', 'jpeg', 'png', 'webp', 'gif'], true)) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Only jpg, jpeg, png, webp, and gif images can be resized.',
+            ], 422);
+        }
+
+        $sourceInfo = getimagesize($realFile);
+        if (!is_array($sourceInfo) || ($sourceInfo[0] ?? 0) < 1 || ($sourceInfo[1] ?? 0) < 1) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Unable to read image dimensions.',
+            ], 422);
+        }
+
+        $sourceWidth = (int) $sourceInfo[0];
+        $sourceHeight = (int) $sourceInfo[1];
+        $targetWidth = (int) $validated['width'];
+        $targetHeight = (int) $validated['height'];
+
+        $scale = min($targetWidth / max(1, $sourceWidth), $targetHeight / max(1, $sourceHeight));
+        $scale = min(1.0, max(0.01, $scale));
+        $newWidth = max(1, (int) floor($sourceWidth * $scale));
+        $newHeight = max(1, (int) floor($sourceHeight * $scale));
+
+        $sourceImage = match ($extension) {
+            'jpg', 'jpeg' => function_exists('imagecreatefromjpeg') ? @imagecreatefromjpeg($realFile) : false,
+            'png' => function_exists('imagecreatefrompng') ? @imagecreatefrompng($realFile) : false,
+            'gif' => function_exists('imagecreatefromgif') ? @imagecreatefromgif($realFile) : false,
+            'webp' => function_exists('imagecreatefromwebp') ? @imagecreatefromwebp($realFile) : false,
+            default => false,
+        };
+
+        if (!is_resource($sourceImage) && !is_object($sourceImage)) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Failed to open the source image.',
+            ], 422);
+        }
+
+        $targetImage = imagecreatetruecolor($newWidth, $newHeight);
+        if ($targetImage === false) {
+            if (is_resource($sourceImage) || is_object($sourceImage)) {
+                imagedestroy($sourceImage);
+            }
+            return response()->json([
+                'ok' => false,
+                'message' => 'Failed to allocate destination image.',
+            ], 500);
+        }
+
+        if (in_array($extension, ['png', 'gif', 'webp'], true)) {
+            imagealphablending($targetImage, false);
+            imagesavealpha($targetImage, true);
+            $transparent = imagecolorallocatealpha($targetImage, 0, 0, 0, 127);
+            imagefilledrectangle($targetImage, 0, 0, $newWidth, $newHeight, $transparent);
+        }
+
+        imagecopyresampled($targetImage, $sourceImage, 0, 0, 0, 0, $newWidth, $newHeight, $sourceWidth, $sourceHeight);
+
+        $replace = (bool) ($validated['replace'] ?? false);
+        $outputRelative = $relativePath;
+        if (!$replace) {
+            $directory = trim((string) pathinfo($relativePath, PATHINFO_DIRNAME), '/');
+            $basename = (string) pathinfo($relativePath, PATHINFO_FILENAME);
+            $outputRelative = ($directory !== '' ? $directory . '/' : '') . $basename . '-' . $newWidth . 'x' . $newHeight . '.' . $extension;
+        }
+        $outputAbsolute = public_path($outputRelative);
+
+        $saved = match ($extension) {
+            'jpg', 'jpeg' => function_exists('imagejpeg') ? imagejpeg($targetImage, $outputAbsolute, 88) : false,
+            'png' => function_exists('imagepng') ? imagepng($targetImage, $outputAbsolute, 6) : false,
+            'gif' => function_exists('imagegif') ? imagegif($targetImage, $outputAbsolute) : false,
+            'webp' => function_exists('imagewebp') ? imagewebp($targetImage, $outputAbsolute, 88) : false,
+            default => false,
+        };
+
+        imagedestroy($sourceImage);
+        imagedestroy($targetImage);
+
+        if (!$saved) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Failed to save resized image.',
+            ], 500);
+        }
+
+        $item = $this->buildLocalMediaItem($outputRelative);
+        if ($item === null) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Image resized, but resulting file metadata could not be read.',
+            ], 500);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'message' => 'Image resized successfully.',
+            'item' => $item,
         ]);
     }
 
@@ -633,6 +993,253 @@ class UiOptionsController extends Controller
     }
 
     /**
+     * @return array<int, string>
+     */
+    private function allowedMediaExtensions(): array
+    {
+        return ['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg', 'ico', 'mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac'];
+    }
+
+    /**
+     * @return array{mode:string,disk:string,label:string}
+     */
+    private function mediaStorageTarget(): array
+    {
+        $defaultDisk = trim((string) config('filesystems.default', 'local'));
+        $s3Bucket = trim((string) config('filesystems.disks.s3.bucket', ''));
+        $s3Driver = trim((string) config('filesystems.disks.s3.driver', ''));
+
+        if ($defaultDisk === 's3' && $s3Driver === 's3' && $s3Bucket !== '') {
+            return [
+                'mode' => 'disk',
+                'disk' => 's3',
+                'label' => 'AWS S3: ' . $s3Bucket,
+            ];
+        }
+
+        return [
+            'mode' => 'local',
+            'disk' => 'public',
+            'label' => 'Local /public/uploads',
+        ];
+    }
+
+    private function sanitizeMediaFolder(string $folder): string
+    {
+        $folder = trim(str_replace('\\', '/', $folder), '/');
+        if ($folder === '') {
+            return '';
+        }
+
+        $segments = array_values(array_filter(array_map(function (string $segment) {
+            return $this->sanitizeMediaFolderSegment($segment);
+        }, explode('/', $folder))));
+
+        return implode('/', $segments);
+    }
+
+    private function sanitizeMediaFolderSegment(string $segment): string
+    {
+        $segment = trim(str_replace('\\', '/', $segment));
+        if ($segment === '' || $segment === '.' || $segment === '..') {
+            return '';
+        }
+
+        $clean = preg_replace('/[^a-zA-Z0-9._-]+/', '-', $segment) ?? '';
+        return trim($clean, '-.');
+    }
+
+    private function mediaBaseRelativePath(string $folder = ''): string
+    {
+        $folder = $this->sanitizeMediaFolder($folder);
+        return $folder === '' ? 'uploads' : ('uploads/' . $folder);
+    }
+
+    private function normalizeMediaPath(string $path): string
+    {
+        $clean = trim(str_replace('\\', '/', $path));
+        if ($clean === '') {
+            return '';
+        }
+
+        if (preg_match('#uploads/.*$#i', $clean, $matches) === 1) {
+            return ltrim((string) ($matches[0] ?? ''), '/');
+        }
+
+        return ltrim($clean, '/');
+    }
+
+    private function mediaTypeFromExtension(string $extension): string
+    {
+        $extension = strtolower(trim($extension));
+        if (in_array($extension, ['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg', 'ico'], true)) {
+            return 'image';
+        }
+        if (in_array($extension, ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac'], true)) {
+            return 'audio';
+        }
+        return 'file';
+    }
+
+    /**
+     * @return array{name:string,path:string,url:string,type:string,extension:string,size_kb:string,modified_at:string}|null
+     */
+    private function buildLocalMediaItem(string $relativePath): ?array
+    {
+        $relativePath = $this->normalizeMediaPath($relativePath);
+        if ($relativePath === '') {
+            return null;
+        }
+
+        $absolutePath = public_path($relativePath);
+        $realPublic = realpath(public_path()) ?: public_path();
+        $realFile = realpath($absolutePath);
+        if ($realFile === false || !str_starts_with($realFile, $realPublic) || !File::exists($realFile)) {
+            return null;
+        }
+
+        $extension = strtolower((string) pathinfo($realFile, PATHINFO_EXTENSION));
+        $size = 0;
+        $modifiedAt = now()->format('Y-m-d H:i');
+
+        try {
+            $size = (int) File::size($realFile);
+        } catch (Throwable) {
+            $size = 0;
+        }
+
+        try {
+            $modifiedAt = date('Y-m-d H:i', (int) File::lastModified($realFile));
+        } catch (Throwable) {
+            $modifiedAt = now()->format('Y-m-d H:i');
+        }
+
+        return [
+            'name' => (string) basename($realFile),
+            'path' => $relativePath,
+            'url' => url($relativePath),
+            'type' => $this->mediaTypeFromExtension($extension),
+            'extension' => $extension,
+            'size_kb' => number_format(max(0, $size) / 1024, 1),
+            'modified_at' => $modifiedAt,
+        ];
+    }
+
+    /**
+     * @param \Illuminate\Contracts\Filesystem\Filesystem|\Illuminate\Filesystem\FilesystemAdapter $disk
+     * @return array{name:string,path:string,url:string,type:string,extension:string,size_kb:string,modified_at:string}|null
+     */
+    private function buildDiskMediaItem($disk, string $path, string $diskName): ?array
+    {
+        $relativePath = $this->normalizeMediaPath($path);
+        if ($relativePath === '') {
+            return null;
+        }
+
+        $extension = strtolower((string) pathinfo($relativePath, PATHINFO_EXTENSION));
+        if (!in_array($extension, $this->allowedMediaExtensions(), true)) {
+            return null;
+        }
+
+        $size = 0;
+        $modifiedAt = now()->format('Y-m-d H:i');
+        $url = $this->mediaFileUrl($relativePath, ['mode' => 'disk', 'disk' => $diskName]);
+
+        try {
+            $size = (int) $disk->size($relativePath);
+        } catch (Throwable) {
+            $size = 0;
+        }
+
+        try {
+            $modifiedAt = date('Y-m-d H:i', (int) $disk->lastModified($relativePath));
+        } catch (Throwable) {
+            $modifiedAt = now()->format('Y-m-d H:i');
+        }
+
+        if ($url === '') {
+            $url = '/' . ltrim($relativePath, '/');
+        }
+
+        return [
+            'name' => (string) basename($relativePath),
+            'path' => $relativePath,
+            'url' => $url,
+            'type' => $this->mediaTypeFromExtension($extension),
+            'extension' => $extension,
+            'size_kb' => number_format(max(0, $size) / 1024, 1),
+            'modified_at' => $modifiedAt,
+        ];
+    }
+
+    /**
+     * @param array{mode:string,disk:string} $storage
+     */
+    private function mediaFileUrl(string $relativePath, array $storage): string
+    {
+        if (($storage['mode'] ?? '') === 'disk') {
+            try {
+                return (string) Storage::disk((string) $storage['disk'])->url($relativePath);
+            } catch (Throwable) {
+                return '';
+            }
+        }
+
+        return url($relativePath);
+    }
+
+    private function clearBrandingAssetReferences(string $relativePath, string $absoluteUrl = ''): void
+    {
+        $candidates = array_values(array_filter(array_unique([
+            $this->normalizeAssetReference($relativePath),
+            $this->normalizeAssetReference($absoluteUrl),
+            $this->normalizeAssetReference(url($relativePath)),
+        ])));
+        if (empty($candidates)) {
+            return;
+        }
+
+        $settings = [
+            'ui.logo_url' => AppSettings::get('ui.logo_url', ''),
+            'ui.favicon_url' => AppSettings::get('ui.favicon_url', ''),
+            'ui.app_icon_url' => AppSettings::get('ui.app_icon_url', ''),
+            'ui.notification_sound_url' => AppSettings::get('ui.notification_sound_url', ''),
+        ];
+
+        $updates = [];
+        foreach ($settings as $key => $value) {
+            $normalized = $this->normalizeAssetReference((string) $value);
+            if ($normalized !== '' && in_array($normalized, $candidates, true)) {
+                $updates[$key] = '';
+            }
+        }
+
+        if (!empty($updates)) {
+            AppSettings::putMany($updates);
+        }
+    }
+
+    private function normalizeAssetReference(string $value): string
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return '';
+        }
+
+        $candidate = $value;
+        if (preg_match('/^(https?:)?\/\//i', $value) === 1) {
+            $candidate = (string) (parse_url($value, PHP_URL_PATH) ?? '');
+        }
+
+        $candidate = str_replace('\\', '/', $candidate);
+        if (preg_match('#uploads/.*$#i', $candidate, $matches) === 1) {
+            return ltrim((string) ($matches[0] ?? ''), '/');
+        }
+
+        return ltrim($candidate, '/');
+    }
+
+    /**
      * @return array<int, int>
      */
     private function roleUserCounts(): array
@@ -662,6 +1269,7 @@ class UiOptionsController extends Controller
             resource_path('views/dashboard.blade.php'),
             resource_path('views/settings/index.blade.php'),
             resource_path('views/settings/users.blade.php'),
+            resource_path('views/settings/media.blade.php'),
             resource_path('views/settings/rbac.blade.php'),
             resource_path('views/settings/rbac-create.blade.php'),
             resource_path('views/settings/rbac-edit.blade.php'),

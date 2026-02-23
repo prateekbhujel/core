@@ -17,8 +17,9 @@ Laravel starter kit for Haarray products with progressive SPA behavior, reusable
 - Collapsible/expandable desktop sidebar + mobile hamburger sidebar
 - Settings tabs for app-level controls: App & Branding, Activity, Security, Notifications, System
 - Dedicated full pages for `Users` and `Access & RBAC` from sidebar
-- Built-in media/file manager endpoint for editor and branding uploads
-- Global media manager modal (image/audio) with upload and picker support
+- Dedicated `Media Library` page (`/settings/media`) with folders, CSV export, and local image resize
+- Built-in media/file manager endpoints for modal picker, editor picker, and settings asset injection
+- Storage fallback: uses S3 when configured, otherwise local `public/uploads`
 - Global search modal (`⌘K` / `Ctrl+K`) with config-driven + DB-backed results
 - Editor tools now use modal UI (link/image/table) instead of browser prompts
 - Built-in debug console tray for client errors + SPA failures
@@ -88,9 +89,18 @@ haarray-core/
 │   └── settings/
 │       ├── index.blade.php
 │       ├── users.blade.php
+│       ├── media.blade.php
 │       ├── rbac.blade.php
 │       ├── rbac-create.blade.php
 │       └── rbac-edit.blade.php
+├── resources/views/errors/
+│   ├── layout.blade.php
+│   ├── 403.blade.php
+│   ├── 404.blade.php
+│   ├── 419.blade.php
+│   ├── 429.blade.php
+│   ├── 500.blade.php
+│   └── 503.blade.php
 ├── docs/
 │   ├── SPA.md
 │   └── STARTER_KIT.md
@@ -219,6 +229,8 @@ If Blade cache writes fail, run the chmod commands above again.
 - Tutorials:
   - `docs/tutorials/CRUD_WORKFLOW.md`
   - `docs/tutorials/NOTIFIER_HELPER.md`
+  - `docs/tutorials/MEDIA_MANAGER.md`
+  - `docs/tutorials/DEPLOYMENT_MODES.md`
   - `docs/tutorials/INTEGRATIONS_FACEBOOK_TELEGRAM.md`
 
 ## Philosophy
