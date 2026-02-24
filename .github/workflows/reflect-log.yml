@@ -1,0 +1,49 @@
+name: Reflect Shared Layer To Log
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  reflect-log:
+    runs-on: ubuntu-latest
+    if: github.repository == 'haarray/harray-core'
+
+    steps:
+      - name: Checkout core
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          tools: composer:v2
+          extensions: mbstring, dom, fileinfo, curl, json, pdo_mysql, sqlite3
+
+      - name: Install core dependencies
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: Checkout log target
+        uses: actions/checkout@v4
+        with:
+          repository: haarray/log
+          token: ${{ secrets.HAARRAY_LOG_PUSH_TOKEN }}
+          path: ../log-target
+          ref: main
+          fetch-depth: 0
+
+      - name: Configure git identity
+        run: |
+          git config --global user.name "haarray-bot"
+          git config --global user.email "bot@haarray.local"
+
+      - name: Reflect shared core layer to log and push
+        env:
+          HAARRAY_REFLECT_LOG_PATH: ${{ github.workspace }}/../log-target
+          HAARRAY_REFLECT_LOG_REMOTE: origin
+          HAARRAY_REFLECT_LOG_BRANCH: main
+        run: |
+          php artisan haarray:reflect:sync log --commit-targets --push-targets --message "chore(sync): reflect shared core layer"

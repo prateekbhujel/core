@@ -1427,22 +1427,25 @@
                 <input type="text" class="form-control" name="alt" placeholder="Describe image">
               </div>
             </div>
-            <div class="h-editor-fm-wrap">
-              <button type="button" class="btn btn-outline-secondary btn-sm" data-editor-fm-toggle>
-                <i class="fa-solid fa-folder-open me-1"></i>
-                Choose From File Manager
+            <div class="h-editor-media-tools">
+              <button type="button" class="btn btn-outline-secondary btn-sm" data-editor-media-pick>
+                <i class="fa-solid fa-photo-film me-1"></i>
+                Choose From Media Library
               </button>
-              <div class="h-editor-fm-panel" hidden>
-                <div class="h-editor-fm-head">
-                  <input type="text" class="form-control form-control-sm" placeholder="Search files..." data-editor-fm-search>
-                  <div class="h-editor-fm-upload">
-                    <input type="file" class="form-control form-control-sm" data-editor-fm-file accept=".jpg,.jpeg,.png,.webp,.gif,.svg,.ico,image/*">
-                    <button type="button" class="btn btn-sm btn-primary" data-editor-fm-upload>Upload</button>
-                  </div>
-                </div>
-                <div class="h-editor-fm-grid" data-editor-fm-grid></div>
+              <label class="btn btn-outline-secondary btn-sm mb-0 h-editor-media-upload">
+                <i class="fa-solid fa-upload me-1"></i>
+                Upload From Device
+                <input type="file" accept=".jpg,.jpeg,.png,.webp,.gif,.svg,.ico,image/*" data-editor-media-upload="1">
+              </label>
+            </div>
+            <div class="h-editor-media-preview" data-editor-media-preview hidden>
+              <img src="" alt="" data-editor-media-preview-img>
+              <div class="h-editor-media-preview-copy">
+                <div class="h-editor-media-preview-title">Selected media</div>
+                <div class="h-editor-media-preview-url" data-editor-media-preview-url>URL will appear here.</div>
               </div>
             </div>
+            <div class="h-note h-editor-modal-note">Tip: paste URL manually, upload directly, or choose from Media Library.</div>
           `,
         },
         table: {
@@ -1494,7 +1497,7 @@
       `;
 
       if (type === 'image') {
-        this._bindFileManagerPanel(formEl);
+        this._bindImageTool(formEl);
       }
 
       if (window.HModal) {
@@ -1566,108 +1569,105 @@
       });
     },
 
-    _bindFileManagerPanel(formEl) {
-      const panel = formEl.querySelector('.h-editor-fm-panel');
-      const toggle = formEl.querySelector('[data-editor-fm-toggle]');
-      const grid = formEl.querySelector('[data-editor-fm-grid]');
-      const search = formEl.querySelector('[data-editor-fm-search]');
-      const fileInput = formEl.querySelector('[data-editor-fm-file]');
-      const uploadBtn = formEl.querySelector('[data-editor-fm-upload]');
+    _bindImageTool(formEl) {
       const srcInput = formEl.querySelector('input[name="src"]');
+      const pickButton = formEl.querySelector('[data-editor-media-pick]');
+      const uploadInput = formEl.querySelector('input[data-editor-media-upload]');
+      const preview = formEl.querySelector('[data-editor-media-preview]');
+      const previewImg = formEl.querySelector('[data-editor-media-preview-img]');
+      const previewUrl = formEl.querySelector('[data-editor-media-preview-url]');
 
-      if (!panel || !toggle || !grid || !search || !uploadBtn || !fileInput || !srcInput) return;
+      if (!srcInput) return;
 
-      const render = (items) => {
-        if (!Array.isArray(items) || items.length === 0) {
-          grid.innerHTML = '<div class="h-muted" style="font-size:12px;">No files found.</div>';
+      const setPreview = (url) => {
+        const value = String(url || '').trim();
+        if (!preview || !previewImg || !previewUrl) return;
+        if (!value || !this._isSafeUrl(value)) {
+          preview.setAttribute('hidden', 'hidden');
+          previewImg.setAttribute('src', '');
+          previewUrl.textContent = 'URL will appear here.';
           return;
         }
-
-        grid.innerHTML = items.map((item) => `
-          <button type="button" class="h-editor-fm-item" data-file-url="${this._escapeAttribute(item.url || '')}" title="${this._escapeAttribute(item.name || '')}">
-            <img src="${this._escapeAttribute(item.url || '')}" alt="${this._escapeAttribute(item.name || '')}">
-            <span>${this._escapeHtml(item.name || 'file')}</span>
-          </button>
-        `).join('');
+        preview.removeAttribute('hidden');
+        previewImg.setAttribute('src', value);
+        previewUrl.textContent = value;
       };
 
-      const loadItems = (query = '') => {
-        const endpoint = String(document.body.dataset.fileManagerListUrl || '').trim();
-        if (!endpoint) {
-          render([]);
-          return;
-        }
-
-        const params = query ? { q: query } : {};
-        const request = window.HApi && typeof window.HApi.get === 'function'
-          ? window.HApi.get(endpoint, params)
-          : $.ajax({ url: endpoint, method: 'GET', data: params });
-
-        request.done((payload) => {
-          render(Array.isArray(payload.items) ? payload.items : []);
-        }).fail(() => {
-          render([]);
-          if (window.HToast) window.HToast.error('Unable to load media files.');
-        });
-      };
-
-      toggle.addEventListener('click', () => {
-        const isHidden = panel.hasAttribute('hidden');
-        if (isHidden) {
-          panel.removeAttribute('hidden');
-          loadItems('');
-        } else {
-          panel.setAttribute('hidden', 'hidden');
-        }
+      srcInput.addEventListener('input', () => {
+        setPreview(srcInput.value);
       });
+      setPreview(srcInput.value);
 
-      search.addEventListener('input', () => {
-        loadItems(String(search.value || '').trim());
-      });
-
-      grid.addEventListener('click', (event) => {
-        const pick = event.target.closest('.h-editor-fm-item[data-file-url]');
-        if (!pick) return;
-        const url = String(pick.getAttribute('data-file-url') || '');
-        if (!url) return;
-        srcInput.value = url;
-      });
-
-      uploadBtn.addEventListener('click', () => {
-        const endpoint = String(document.body.dataset.fileManagerUploadUrl || '').trim();
-        const file = fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
-        if (!endpoint || !file) {
-          if (window.HToast) window.HToast.warning('Choose a file first.');
-          return;
-        }
-
-        const token = String((document.querySelector('meta[name="csrf-token"]') || {}).content || '');
-        const data = new FormData();
-        data.append('file', file);
-        data.append('folder', 'editor');
-
-        $.ajax({
-          url: endpoint,
-          method: 'POST',
-          data,
-          processData: false,
-          contentType: false,
-          headers: token ? { 'X-CSRF-TOKEN': token } : {},
-        }).done((payload) => {
-          const item = payload && payload.item ? payload.item : null;
-          if (item && item.url) {
-            srcInput.value = String(item.url);
+      if (pickButton) {
+        pickButton.addEventListener('click', () => {
+          if (!window.HMediaManager || typeof window.HMediaManager.open !== 'function') {
+            if (window.HToast) window.HToast.warning('Media manager is not available for this user.');
+            return;
           }
-          fileInput.value = '';
-          loadItems(String(search.value || '').trim());
-          if (window.HToast) window.HToast.success('File uploaded.');
-        }).fail((xhr) => {
-          const message = xhr && xhr.responseJSON && xhr.responseJSON.message
-            ? xhr.responseJSON.message
-            : 'Upload failed.';
-          if (window.HToast) window.HToast.error(message);
+          if (!document.getElementById('h-media-manager-modal')) {
+            if (window.HToast) window.HToast.warning('Media manager modal is not available on this page.');
+            return;
+          }
+
+          window.HMediaManager.open({
+            targetInputId: '',
+            onSelect: (url) => {
+              const value = String(url || '').trim();
+              if (!value || !this._isSafeUrl(value)) {
+                if (window.HToast) window.HToast.warning('Selected media URL is not allowed.');
+                return;
+              }
+              srcInput.value = value;
+              srcInput.dispatchEvent(new Event('input', { bubbles: true }));
+              srcInput.dispatchEvent(new Event('change', { bubbles: true }));
+            },
+          });
         });
-      });
+      }
+
+      if (uploadInput) {
+        uploadInput.addEventListener('change', () => {
+          const endpoint = String(document.body.dataset.fileManagerUploadUrl || '').trim();
+          const file = uploadInput.files && uploadInput.files[0] ? uploadInput.files[0] : null;
+          if (!file) return;
+          if (!endpoint) {
+            if (window.HToast) window.HToast.error('File manager upload endpoint is missing.');
+            uploadInput.value = '';
+            return;
+          }
+
+          const token = String((document.querySelector('meta[name="csrf-token"]') || {}).content || '');
+          const data = new FormData();
+          data.append('file', file);
+          data.append('folder', 'editor');
+
+          $.ajax({
+            url: endpoint,
+            method: 'POST',
+            data,
+            processData: false,
+            contentType: false,
+            headers: token ? { 'X-CSRF-TOKEN': token } : {},
+          }).done((payload) => {
+            const item = payload && payload.item ? payload.item : null;
+            if (item && item.url) {
+              srcInput.value = String(item.url);
+              srcInput.dispatchEvent(new Event('input', { bubbles: true }));
+              srcInput.dispatchEvent(new Event('change', { bubbles: true }));
+              if (window.HToast) window.HToast.success('Image uploaded.');
+            } else if (window.HToast) {
+              window.HToast.warning('Upload completed but URL is missing.');
+            }
+          }).fail((xhr) => {
+            const message = xhr && xhr.responseJSON && xhr.responseJSON.message
+              ? xhr.responseJSON.message
+              : 'Upload failed.';
+            if (window.HToast) window.HToast.error(message);
+          }).always(() => {
+            uploadInput.value = '';
+          });
+        });
+      }
     },
 
     _promptUrl(label = 'Enter URL') {

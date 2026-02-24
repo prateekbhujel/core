@@ -71,11 +71,11 @@ class MLSuggestionService
 
         foreach ($openIPOs as $ipo) {
             $minAmount = $ipo->min_units * $ipo->price_per_unit;
-            $daysLeft  = now()->diffInDays($ipo->close_date, false);
+            $daysLeft  = $this->wholeDaysUntil($ipo->close_date);
 
             if ($idleCash >= $minAmount && $daysLeft >= 0) {
                 $suggestions[] = [
-                    'title'    => "Apply for {$ipo->company_name} IPO — Closes in {$daysLeft} day(s)",
+                    'title'    => "Apply for {$ipo->company_name} IPO — Closes in {$this->dayLabel($daysLeft)}",
                     'message'  => "You have रू " . number_format($idleCash) . " idle. Minimum application: रू " . number_format($minAmount) . " for {$ipo->min_units} units. Closes {$ipo->close_date->format('M d')}.",
                     'type'     => 'ipo',
                     'priority' => 'high',
@@ -90,8 +90,9 @@ class MLSuggestionService
             ->first();
 
         if ($upcoming) {
+            $daysUntilOpen = $this->wholeDaysUntil($upcoming->open_date);
             $suggestions[] = [
-                'title'    => "{$upcoming->company_name} IPO opens in " . now()->diffInDays($upcoming->open_date) . " day(s)",
+                'title'    => "{$upcoming->company_name} IPO opens in {$this->dayLabel($daysUntilOpen)}",
                 'message'  => "Start preparing funds. Opens {$upcoming->open_date->format('M d')}, minimum: रू " . number_format($upcoming->min_units * $upcoming->price_per_unit),
                 'type'     => 'ipo',
                 'priority' => 'medium',
@@ -100,6 +101,26 @@ class MLSuggestionService
         }
 
         return $suggestions;
+    }
+
+    /**
+     * Convert time delta to whole future days for clean UI text.
+     */
+    protected function wholeDaysUntil($target): int
+    {
+        $date = $target instanceof Carbon ? $target : Carbon::parse((string) $target);
+        $seconds = now()->diffInSeconds($date, false);
+
+        if ($seconds <= 0) {
+            return 0;
+        }
+
+        return (int) ceil($seconds / 86400);
+    }
+
+    protected function dayLabel(int $days): string
+    {
+        return $days === 1 ? '1 day' : $days . ' days';
     }
 
     /**

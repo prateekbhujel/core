@@ -78,6 +78,7 @@ return [
     */
     'realtime' => [
         'poll_seconds' => max(10, (int) env('HAARRAY_NOTIFY_POLL_SECONDS', 20)),
+        'auto_poll' => filter_var(env('HAARRAY_NOTIFY_AUTO_POLL', false), FILTER_VALIDATE_BOOL),
         'broadcast_driver' => env('BROADCAST_CONNECTION', 'log'),
         'pusher' => [
             'app_id' => env('PUSHER_APP_ID'),
@@ -99,6 +100,19 @@ return [
     'ops' => [
         'allow_shell_ui' => filter_var(env('HAARRAY_ALLOW_SHELL_UI', false), FILTER_VALIDATE_BOOL),
         'hot_reload' => filter_var(env('HAARRAY_HOT_RELOAD', true), FILTER_VALIDATE_BOOL),
+        'hot_reload_stream_max_seconds' => max(15, min((int) env('HAARRAY_HOT_RELOAD_STREAM_MAX_SECONDS', 55), 240)),
+        'hot_reload_stream_sleep_ms' => max(300, min((int) env('HAARRAY_HOT_RELOAD_STREAM_SLEEP_MS', 1000), 5000)),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Shared Hosting Inline Automation (Queue/Cron Fallback)
+    |--------------------------------------------------------------------------
+    */
+    'inline_automation' => [
+        'enabled' => filter_var(env('HAARRAY_INLINE_AUTOMATION', true), FILTER_VALIDATE_BOOL),
+        'suggestions_every_seconds' => max(60, (int) env('HAARRAY_INLINE_SUGGESTIONS_EVERY_SECONDS', 900)),
+        'market_refresh_every_seconds' => max(300, (int) env('HAARRAY_INLINE_MARKET_REFRESH_EVERY_SECONDS', 3600)),
     ],
 
     /*
