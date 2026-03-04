@@ -164,20 +164,33 @@
       </div>
       <div class="h-card-body">
         @foreach($ipos as $ipo)
+        @php
+          $status = strtolower((string) ($ipo['status'] ?? 'upcoming'));
+          $openDate = $ipo['open_date'] ?? null;
+          $closeDate = $ipo['close_date'] ?? null;
+          $dateLabelAd = ($openDate || $closeDate)
+            ? trim(($openDate ? $hAdDate($openDate) : '-') . ' — ' . ($closeDate ? $hAdDate($closeDate) : '-'))
+            : ($ipo['dates'] ?? 'Date TBA');
+          $dateLabelBs = ($openDate || $closeDate)
+            ? trim(($openDate ? $hBsDate($openDate) : '-') . ' — ' . ($closeDate ? $hBsDate($closeDate) : '-'))
+            : null;
+        @endphp
         <div class="h-ipo-item">
-          <div class="h-ipo-name">{{ $ipo['name'] }}</div>
+          <div class="h-ipo-name">{{ $ipo['name'] ?? 'IPO' }}</div>
           <div class="h-ipo-row">
-            <span class="h-ipo-dates">{{ $hAdDate($ipo['open_date']) }} — {{ $hAdDate($ipo['close_date']) }}</span>
-            <span class="h-badge {{ $ipo['status'] === 'open' ? 'green' : 'gold' }}">
-              {{ strtoupper($ipo['status']) }}
+            <span class="h-ipo-dates">{{ $dateLabelAd }}</span>
+            <span class="h-badge {{ $status === 'open' ? 'green' : 'gold' }}">
+              {{ strtoupper($status) }}
             </span>
           </div>
           <div style="font-family:var(--fm);font-size:10px;color:var(--t3);">
-            रू {{ $ipo['unit'] }}/unit · Min {{ $ipo['min'] }} units · रू {{ number_format($ipo['unit'] * $ipo['min']) }}
+            रू {{ $ipo['unit'] ?? 0 }}/unit · Min {{ $ipo['min'] ?? 0 }} units · रू {{ number_format((float)($ipo['unit'] ?? 0) * (float)($ipo['min'] ?? 0)) }}
           </div>
-          <div style="font-family:var(--fm);font-size:10px;color:var(--t3);margin-top:4px;">
-            {{ $hBsDate($ipo['open_date']) }} — {{ $hBsDate($ipo['close_date']) }}
-          </div>
+          @if($dateLabelBs)
+            <div style="font-family:var(--fm);font-size:10px;color:var(--t3);margin-top:4px;">
+              {{ $dateLabelBs }}
+            </div>
+          @endif
         </div>
         @endforeach
 
