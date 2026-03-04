@@ -8,7 +8,6 @@ on:
 jobs:
   reflect-log:
     runs-on: ubuntu-latest
-    if: github.repository == 'haarray/harray-core'
 
     steps:
       - name: Checkout core

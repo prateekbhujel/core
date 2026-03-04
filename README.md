@@ -257,3 +257,24 @@ If Blade cache writes fail, run the chmod commands above again.
 ## Philosophy
 
 Haarray Core is not a heavy frontend framework replacement. It keeps Laravel simple, then layers modern UX progressively so every app can scale from MVP to production without rewriting the stack.
+
+## GitHub Actions auto-deploy to cPanel
+
+Workflow: `.github/workflows/deploy-cpanel-core.yml`
+
+Every push to `main` deploys this repository to your shared-hosting path through SSH + `rsync`, then runs composer/artisan optimization on the server.
+
+Required repository secrets:
+
+- `CPANEL_HOST`
+- `CPANEL_SSH_PORT` (optional, defaults to `22`)
+- `CPANEL_USER`
+- `CPANEL_SSH_PRIVATE_KEY`
+- `CORE_DEPLOY_PATH` (example: `/home8/pratikb1/core`)
+- `CORE_RUN_MIGRATIONS` (`1` or `0`)
+- `CORE_DEPLOY_DELETE` (`1` or `0`)
+
+Deploy behavior:
+
+- Preserves runtime data by excluding `.env`, `storage/`, and `public/uploads/`.
+- Keeps `vendor/` out of upload and runs `composer install` server-side when composer exists.
