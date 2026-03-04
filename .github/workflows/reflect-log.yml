@@ -11,15 +11,30 @@ permissions:
 jobs:
   reflect-log:
     runs-on: ubuntu-latest
-    if: github.repository == 'haarray/core' && secrets.HAARRAY_LOG_PUSH_TOKEN != ''
+    if: github.repository == 'haarray/core'
 
     steps:
+      - name: Guard required token
+        id: guard
+        env:
+          HAARRAY_LOG_PUSH_TOKEN: ${{ secrets.HAARRAY_LOG_PUSH_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${HAARRAY_LOG_PUSH_TOKEN:-}" ]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "HAARRAY_LOG_PUSH_TOKEN missing; skipping reflection."
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Checkout core
+        if: steps.guard.outputs.enabled == 'true'
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Setup PHP
+        if: steps.guard.outputs.enabled == 'true'
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.2'
@@ -27,9 +42,11 @@ jobs:
           extensions: mbstring, dom, fileinfo, curl, json, pdo_mysql, sqlite3
 
       - name: Install core dependencies
+        if: steps.guard.outputs.enabled == 'true'
         run: composer install --no-interaction --no-progress --prefer-dist
 
       - name: Checkout log target
+        if: steps.guard.outputs.enabled == 'true'
         uses: actions/checkout@v4
         with:
           repository: haarray/log
@@ -39,14 +56,20 @@ jobs:
           fetch-depth: 0
 
       - name: Configure git identity
+        if: steps.guard.outputs.enabled == 'true'
         run: |
           git config --global user.name "haarray-bot"
           git config --global user.email "bot@haarray.local"
 
       - name: Reflect shared core layer to log and push
+        if: steps.guard.outputs.enabled == 'true'
         env:
           HAARRAY_REFLECT_LOG_PATH: ${{ github.workspace }}/log-target
           HAARRAY_REFLECT_LOG_REMOTE: origin
           HAARRAY_REFLECT_LOG_BRANCH: main
         run: |
           php artisan haarray:reflect:sync log --commit-targets --push-targets --message "chore(sync): reflect shared core layer"
+
+      - name: Reflection skipped
+        if: steps.guard.outputs.enabled != 'true'
+        run: echo "Reflection skipped."
